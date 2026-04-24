@@ -146,6 +146,15 @@ dependencies = [
 [[package]]
 name = "amplifier-module-tool-search"
 version = "0.1.0"
+dependencies = [
+ "amplifier-core",
+ "glob",
+ "regex",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "walkdir",
+]
 
 [[package]]
 name = "amplifier-module-tool-skills"

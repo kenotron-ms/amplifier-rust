@@ -1,6 +1,16 @@
 [package]
-    name = "amplifier-module-tool-search"
-    version = "0.1.0"
-    edition = "2021"
-    
+name = "amplifier-module-tool-search"
+version = "0.1.0"
+edition = "2021"
+
 [dependencies]
+amplifier-core = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+regex = "1"
+walkdir = "2"
+glob = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tempfile = "3"
