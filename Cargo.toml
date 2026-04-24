@@ -6,6 +6,11 @@ members = [
     "crates/amplifier-module-provider-anthropic",
     "crates/amplifier-module-tool-task",
     "crates/amplifier-module-tool-skills",
+    "crates/amplifier-module-provider-gemini",
+    "crates/amplifier-module-provider-openai",
+    "crates/amplifier-module-provider-ollama",
+    "crates/amplifier-module-tool-web",
+    "crates/amplifier-module-tool-todo",
 ]
 
 [workspace.dependencies]
