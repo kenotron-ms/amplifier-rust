@@ -9,6 +9,7 @@ name = "amplifier-android-sandbox"
 path = "src/main.rs"
 
 [dependencies]
+amplifier-core = { workspace = true }
 amplifier-module-tool-filesystem = { path = "../../crates/amplifier-module-tool-filesystem" }
 amplifier-module-tool-bash = { path = "../../crates/amplifier-module-tool-bash" }
 amplifier-module-tool-web = { path = "../../crates/amplifier-module-tool-web" }
