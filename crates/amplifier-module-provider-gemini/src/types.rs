@@ -222,7 +222,9 @@ mod tests {
     fn generation_config_serialisation() {
         let cfg = GeminiGenerationConfig {
             max_output_tokens: 8192,
-            thinking_config: Some(GeminiThinkingConfig { thinking_budget: -1 }),
+            thinking_config: Some(GeminiThinkingConfig {
+                thinking_budget: -1,
+            }),
         };
         let v = serde_json::to_value(&cfg).unwrap();
         assert_eq!(v["maxOutputTokens"], 8192);
@@ -288,9 +290,18 @@ mod tests {
             },
         };
         let v = serde_json::to_value(&req).unwrap();
-        assert!(v.get("systemInstruction").is_some(), "systemInstruction missing");
-        assert!(v.get("generationConfig").is_some(), "generationConfig missing");
-        assert!(v.get("system_instruction").is_none(), "snake_case key leaked");
+        assert!(
+            v.get("systemInstruction").is_some(),
+            "systemInstruction missing"
+        );
+        assert!(
+            v.get("generationConfig").is_some(),
+            "generationConfig missing"
+        );
+        assert!(
+            v.get("system_instruction").is_none(),
+            "snake_case key leaked"
+        );
     }
 
     /// ThinkingConfig budget values: -1 (dynamic), 0 (off), N (fixed).

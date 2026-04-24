@@ -222,7 +222,9 @@ impl GeminiProvider {
         let system_instruction = if system_parts.is_empty() {
             None
         } else {
-            Some(GeminiSystemInstruction { parts: system_parts })
+            Some(GeminiSystemInstruction {
+                parts: system_parts,
+            })
         };
 
         (contents, system_instruction)
@@ -247,14 +249,12 @@ impl GeminiProvider {
                             },
                         })
                     }
-                    ContentBlock::ToolResult { output, .. } => {
-                        Some(GeminiPart::FunctionResponse {
-                            function_response: GeminiFunctionResponse {
-                                name: "tool".to_string(),
-                                response: output.clone(),
-                            },
-                        })
-                    }
+                    ContentBlock::ToolResult { output, .. } => Some(GeminiPart::FunctionResponse {
+                        function_response: GeminiFunctionResponse {
+                            name: "tool".to_string(),
+                            response: output.clone(),
+                        },
+                    }),
                     _ => None,
                 })
                 .collect(),
@@ -317,7 +317,7 @@ impl GeminiProvider {
         // POST to the streaming endpoint with auth key and SSE alt format.
         let response = self
             .client
-            .post(&self.url())
+            .post(self.url())
             .query(&[("key", self.config.api_key.as_str()), ("alt", "sse")])
             .json(&gemini_request)
             .send()
@@ -492,10 +492,7 @@ impl Provider for GeminiProvider {
         Box::pin(async move { self.do_complete(request).await })
     }
 
-    fn parse_tool_calls(
-        &self,
-        response: &ChatResponse,
-    ) -> Vec<amplifier_core::messages::ToolCall> {
+    fn parse_tool_calls(&self, response: &ChatResponse) -> Vec<amplifier_core::messages::ToolCall> {
         response
             .content
             .iter()

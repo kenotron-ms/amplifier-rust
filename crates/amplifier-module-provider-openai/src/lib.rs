@@ -158,7 +158,9 @@ impl OpenAIProvider {
                                             content: json!(text),
                                         });
                                     }
-                                    ContentBlock::ToolCall { id, name, input, .. } => {
+                                    ContentBlock::ToolCall {
+                                        id, name, input, ..
+                                    } => {
                                         let arguments =
                                             serde_json::to_string(input).unwrap_or_default();
                                         items.push(ResponsesInputItem::Message {
@@ -233,10 +235,7 @@ impl OpenAIProvider {
         let response = self
             .client
             .post(&url)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.config.api_key),
-            )
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
             .header("Content-Type", "application/json")
             .json(&body)
             .send()
@@ -305,10 +304,7 @@ impl OpenAIProvider {
     }
 
     /// Extract accumulated assistant text and tool calls from a single response.
-    fn extract_text_and_calls(
-        &self,
-        response: &ResponsesResponse,
-    ) -> (String, Vec<ContentBlock>) {
+    fn extract_text_and_calls(&self, response: &ResponsesResponse) -> (String, Vec<ContentBlock>) {
         let mut text = String::new();
         let mut tool_calls: Vec<ContentBlock> = Vec::new();
 
@@ -460,8 +456,7 @@ impl OpenAIProvider {
                             });
                         }
                         req.previous_response_id = Some(response.id.clone());
-                        req.include =
-                            Some(vec!["reasoning.encrypted_content".to_string()]);
+                        req.include = Some(vec!["reasoning.encrypted_content".to_string()]);
 
                         log::warn!(
                             "openai: response incomplete (max_output_tokens), attempt {}/{}; continuing with previous_response_id={}",
@@ -526,10 +521,7 @@ impl Provider for OpenAIProvider {
             id: "openai".to_string(),
             display_name: "OpenAI".to_string(),
             credential_env_vars: vec!["OPENAI_API_KEY".to_string()],
-            capabilities: vec![
-                "tools".to_string(),
-                "reasoning".to_string(),
-            ],
+            capabilities: vec!["tools".to_string(), "reasoning".to_string()],
             defaults: HashMap::new(),
             config_fields: vec![],
         }

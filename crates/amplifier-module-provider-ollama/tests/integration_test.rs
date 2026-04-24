@@ -142,11 +142,17 @@ async fn ollama_tool_call_is_parsed() {
     };
 
     let provider = OllamaProvider::new(config);
-    let response = provider.complete(make_request("Fetch a URL")).await.unwrap();
+    let response = provider
+        .complete(make_request("Fetch a URL"))
+        .await
+        .unwrap();
 
     // Find the ToolCall block
     let tool_call_block = response.content.iter().find_map(|block| {
-        if let ContentBlock::ToolCall { id, name, input, .. } = block {
+        if let ContentBlock::ToolCall {
+            id, name, input, ..
+        } = block
+        {
             Some((id.clone(), name.clone(), input.clone()))
         } else {
             None
@@ -179,6 +185,9 @@ async fn ollama_real_server_completion() {
     };
 
     let provider = OllamaProvider::new(config);
-    let response = provider.complete(make_request("Say hello in one word.")).await.unwrap();
+    let response = provider
+        .complete(make_request("Say hello in one word."))
+        .await
+        .unwrap();
     assert!(!response.content.is_empty(), "response should have content");
 }

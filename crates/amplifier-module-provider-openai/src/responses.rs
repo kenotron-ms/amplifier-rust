@@ -201,7 +201,10 @@ mod tests {
         let v = serde_json::to_value(&tool).unwrap();
         assert_eq!(v["type"], "function");
         assert_eq!(v["name"], "my_fn");
-        assert!(v.get("tool_type").is_none(), "field should be renamed to 'type'");
+        assert!(
+            v.get("tool_type").is_none(),
+            "field should be renamed to 'type'"
+        );
     }
 
     #[test]
@@ -212,7 +215,10 @@ mod tests {
         };
         let v = serde_json::to_value(&content).unwrap();
         assert_eq!(v["type"], "output_text");
-        assert!(v.get("content_type").is_none(), "field should be renamed to 'type'");
+        assert!(
+            v.get("content_type").is_none(),
+            "field should be renamed to 'type'"
+        );
     }
 
     #[test]

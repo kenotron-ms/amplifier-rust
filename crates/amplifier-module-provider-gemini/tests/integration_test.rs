@@ -70,9 +70,9 @@ fn two_synthetic_ids_are_distinct() {
 
 #[cfg(test)]
 mod wiremock_tests {
-    use amplifier_module_provider_gemini::{GeminiConfig, GeminiProvider};
     use amplifier_core::messages::{ChatRequest, ContentBlock, Message, MessageContent, Role};
     use amplifier_core::traits::Provider;
+    use amplifier_module_provider_gemini::{GeminiConfig, GeminiProvider};
     use std::collections::HashMap;
     use wiremock::matchers::{method, path_regex, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};

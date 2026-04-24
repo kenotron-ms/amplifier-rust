@@ -8,7 +8,10 @@ fn strip_html_removes_script_tags_and_content() {
     let html = r#"<p>Hello</p><script>alert('xss');</script><p>World</p>"#;
     let result = strip_html(html);
     assert!(!result.contains("script"), "script tag should be removed");
-    assert!(!result.contains("alert"), "script content should be removed");
+    assert!(
+        !result.contains("alert"),
+        "script content should be removed"
+    );
     assert!(result.contains("Hello"), "main content should be kept");
     assert!(result.contains("World"), "main content should be kept");
 }
@@ -19,7 +22,10 @@ fn strip_html_removes_style_tags_and_content() {
     let html = r#"<p>Text</p><style>body { color: red; }</style><p>More</p>"#;
     let result = strip_html(html);
     assert!(!result.contains("style"), "style tag should be removed");
-    assert!(!result.contains("color: red"), "style content should be removed");
+    assert!(
+        !result.contains("color: red"),
+        "style content should be removed"
+    );
     assert!(result.contains("Text"), "main content should be kept");
     assert!(result.contains("More"), "main content should be kept");
 }
@@ -30,10 +36,22 @@ fn strip_html_removes_style_tags_and_content() {
 fn strip_html_removes_nav_header_footer() {
     let html = r#"<header>Site Header</header><nav>Navigation Links</nav><main>Main Content</main><footer>Footer Text</footer>"#;
     let result = strip_html(html);
-    assert!(!result.contains("Site Header"), "header content should be removed");
-    assert!(!result.contains("Navigation Links"), "nav content should be removed");
-    assert!(!result.contains("Footer Text"), "footer content should be removed");
-    assert!(result.contains("Main Content"), "main content should be kept");
+    assert!(
+        !result.contains("Site Header"),
+        "header content should be removed"
+    );
+    assert!(
+        !result.contains("Navigation Links"),
+        "nav content should be removed"
+    );
+    assert!(
+        !result.contains("Footer Text"),
+        "footer content should be removed"
+    );
+    assert!(
+        result.contains("Main Content"),
+        "main content should be kept"
+    );
 }
 
 /// Verifies that multiple consecutive whitespace characters are collapsed
@@ -42,9 +60,18 @@ fn strip_html_removes_nav_header_footer() {
 fn strip_html_collapses_whitespace() {
     let html = "<p>Hello   World</p>\n\n<p>Foo\t\tBar</p>";
     let result = strip_html(html);
-    assert!(!result.contains("   "), "multiple spaces should be collapsed");
-    assert!(!result.contains("\t\t"), "multiple tabs should be collapsed");
-    assert!(!result.contains("\n\n"), "double newlines should be collapsed");
+    assert!(
+        !result.contains("   "),
+        "multiple spaces should be collapsed"
+    );
+    assert!(
+        !result.contains("\t\t"),
+        "multiple tabs should be collapsed"
+    );
+    assert!(
+        !result.contains("\n\n"),
+        "double newlines should be collapsed"
+    );
     assert!(result.contains("Hello"), "content should be preserved");
 }
 
@@ -126,4 +153,71 @@ fn ddg_parse_respects_num_results_limit() {
 fn ddg_parse_empty_html_returns_empty() {
     let results = parse_ddg_results("", 5);
     assert!(results.is_empty(), "empty HTML should return empty results");
+}
+
+// ---------------------------------------------------------------------------
+// HTTP status guard tests (Task 9 required fix)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod search_http_status_tests {
+    use amplifier_core::traits::Tool;
+    use amplifier_module_tool_web::search::SearchWebTool;
+    use serde_json::json;
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// SearchWebTool must propagate an HTTP 429 (Too Many Requests) as a
+    /// ToolError, not silently return empty results.
+    #[tokio::test]
+    async fn search_returns_error_on_http_429() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(429))
+            .mount(&server)
+            .await;
+
+        let tool = SearchWebTool::new_with_base_url(server.uri());
+        let result = tool.execute(json!({"query": "rust programming"})).await;
+
+        assert!(
+            result.is_err(),
+            "expected Err for HTTP 429, got: {:?}",
+            result
+        );
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("429"),
+            "error message should contain '429', got: {}",
+            err_msg
+        );
+    }
+
+    /// SearchWebTool must propagate an HTTP 503 (Service Unavailable) as a
+    /// ToolError rather than returning empty results.
+    #[tokio::test]
+    async fn search_returns_error_on_http_503() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(503))
+            .mount(&server)
+            .await;
+
+        let tool = SearchWebTool::new_with_base_url(server.uri());
+        let result = tool.execute(json!({"query": "some query"})).await;
+
+        assert!(
+            result.is_err(),
+            "expected Err for HTTP 503, got: {:?}",
+            result
+        );
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("503"),
+            "error message should contain '503', got: {}",
+            err_msg
+        );
+    }
 }

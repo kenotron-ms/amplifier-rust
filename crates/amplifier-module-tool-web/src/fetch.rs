@@ -195,10 +195,7 @@ impl Tool for FetchUrlTool {
             // --- Perform GET request ---
             let response = client
                 .get(&url)
-                .header(
-                    reqwest::header::USER_AGENT,
-                    "amplifier-tool-web/0.1",
-                )
+                .header(reqwest::header::USER_AGENT, "amplifier-tool-web/0.1")
                 .send()
                 .await
                 .map_err(|e| ToolError::Other {

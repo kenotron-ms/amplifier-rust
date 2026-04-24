@@ -101,6 +101,7 @@ struct ChatChoice {
 /// The message in a choice.
 #[derive(Debug, Deserialize)]
 struct ChatMessage {
+    #[allow(dead_code)]
     #[serde(default)]
     role: Option<String>,
     #[serde(default)]
@@ -194,9 +195,10 @@ impl OllamaProvider {
                         ContentBlock::Text { text, .. } => {
                             out.push(json!({ "role": role, "content": text }));
                         }
-                        ContentBlock::ToolCall { id, name, input, .. } => {
-                            let arguments =
-                                serde_json::to_string(input).unwrap_or_default();
+                        ContentBlock::ToolCall {
+                            id, name, input, ..
+                        } => {
+                            let arguments = serde_json::to_string(input).unwrap_or_default();
                             out.push(json!({
                                 "role": "assistant",
                                 "content": null,
@@ -331,10 +333,7 @@ impl OllamaProvider {
 
         // Attach Authorization header only when api_key is Some.
         if let Some(api_key) = &self.config.api_key {
-            req_builder = req_builder.header(
-                "Authorization",
-                format!("Bearer {}", api_key),
-            );
+            req_builder = req_builder.header("Authorization", format!("Bearer {}", api_key));
         }
 
         let http_response = req_builder
@@ -352,10 +351,7 @@ impl OllamaProvider {
         let status_code = http_response.status().as_u16();
 
         if !http_response.status().is_success() {
-            let error_body: Value = http_response
-                .json()
-                .await
-                .unwrap_or(json!({}));
+            let error_body: Value = http_response.json().await.unwrap_or(json!({}));
             let message = error_body
                 .get("error")
                 .and_then(|e| e.get("message"))
@@ -389,17 +385,20 @@ impl OllamaProvider {
                 })?;
 
         // Take the first choice.
-        let choice = api_response.choices.into_iter().next().ok_or_else(|| {
-            ProviderError::Other {
-                message: "Empty choices in response".to_string(),
-                provider: Some("ollama".to_string()),
-                model: None,
-                retry_after: None,
-                status_code: None,
-                retryable: false,
-                delay_multiplier: None,
-            }
-        })?;
+        let choice =
+            api_response
+                .choices
+                .into_iter()
+                .next()
+                .ok_or_else(|| ProviderError::Other {
+                    message: "Empty choices in response".to_string(),
+                    provider: Some("ollama".to_string()),
+                    model: None,
+                    retry_after: None,
+                    status_code: None,
+                    retryable: false,
+                    delay_multiplier: None,
+                })?;
 
         // Build content blocks.
         let mut content: Vec<ContentBlock> = Vec::new();

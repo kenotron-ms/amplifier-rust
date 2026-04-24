@@ -34,15 +34,11 @@ static DDG_REGEXES: OnceLock<DdgRegexes> = OnceLock::new();
 fn get_ddg_regexes() -> &'static DdgRegexes {
     DDG_REGEXES.get_or_init(|| DdgRegexes {
         // (?si) = DOTALL + case-insensitive
-        result_a_full: Regex::new(
-            r#"(?si)<a[^>]*class="[^"]*result__a[^"]*"[^>]*>.*?</a>"#,
-        )
-        .unwrap(),
+        result_a_full: Regex::new(r#"(?si)<a[^>]*class="[^"]*result__a[^"]*"[^>]*>.*?</a>"#)
+            .unwrap(),
         href: Regex::new(r#"href="([^"]*)""#).unwrap(),
-        snippet_content: Regex::new(
-            r#"(?si)class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</[a-z]"#,
-        )
-        .unwrap(),
+        snippet_content: Regex::new(r#"(?si)class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</[a-z]"#)
+            .unwrap(),
         strip_tags: Regex::new(r#"<[^>]+>"#).unwrap(),
     })
 }
@@ -149,6 +145,9 @@ pub fn parse_ddg_results(html: &str, num_results: usize) -> Vec<Value> {
 pub struct SearchWebTool {
     /// Default HTTP client with a 15-second timeout.
     client: reqwest::Client,
+    /// Base URL for the search endpoint. Defaults to `https://duckduckgo.com/html/`.
+    /// Overridden in tests to point at a mock HTTP server.
+    base_url: String,
 }
 
 impl SearchWebTool {
@@ -158,7 +157,23 @@ impl SearchWebTool {
             .timeout(Duration::from_secs(15))
             .build()
             .unwrap_or_default();
-        Self { client }
+        Self {
+            client,
+            base_url: "https://duckduckgo.com/html/".to_string(),
+        }
+    }
+
+    /// Create a [`SearchWebTool`] that sends requests to `base_url` instead of DuckDuckGo.
+    ///
+    /// Intended for integration testing with mock HTTP servers.
+    /// Production code should always use [`SearchWebTool::new`].
+    #[doc(hidden)]
+    pub fn new_with_base_url(base_url: String) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap_or_default();
+        Self { client, base_url }
     }
 }
 
@@ -232,7 +247,7 @@ impl Tool for SearchWebTool {
 
             // --- URL-encode the query ---
             let encoded_query = urlencoding::encode(&query);
-            let url = format!("https://duckduckgo.com/html/?q={}", encoded_query);
+            let url = format!("{}?q={}", self.base_url, encoded_query);
 
             // --- Perform GET request ---
             let response = self
@@ -247,6 +262,14 @@ impl Tool for SearchWebTool {
                 .map_err(|e| ToolError::Other {
                     message: format!("request failed: {}", e),
                 })?;
+
+            // --- Check HTTP status ---
+            let status = response.status();
+            if !status.is_success() {
+                return Err(ToolError::Other {
+                    message: format!("HTTP {}: {}", status.as_u16(), url),
+                });
+            }
 
             // --- Read body ---
             let body = response.text().await.map_err(|e| ToolError::Other {
