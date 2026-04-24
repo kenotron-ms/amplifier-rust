@@ -2,6 +2,10 @@
 
 pub mod types;
 
+use serde_json::Value;
+use types::{GeminiPart, GeminiStreamChunk};
+use uuid::Uuid;
+
 /// Endpoint: POST https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}
 /// Auth is via query param `key=`, not Authorization header.
 pub const GEMINI_ENDPOINT_BASE: &str =
@@ -38,6 +42,70 @@ impl Default for GeminiConfig {
             max_retries: 3,
         }
     }
+}
+
+/// A synthetic function-call extracted from a Gemini SSE stream chunk.
+///
+/// Gemini does not provide call IDs in its wire format; `id` is generated
+/// locally using a UUID v4 prefixed with `gemini_call_`.
+#[derive(Debug, Clone)]
+pub struct SseFunctionCall {
+    /// Synthetic unique ID for this call (format: `gemini_call_<uuid>`).
+    pub id: String,
+    /// Name of the function the model wants to invoke.
+    pub name: String,
+    /// Arguments for the function call (arbitrary JSON object).
+    pub args: Value,
+}
+
+/// Parse a single SSE data line from the Gemini `streamGenerateContent` endpoint.
+///
+/// Returns `None` when:
+/// * `data` is empty
+/// * `data` starts with `'['` (e.g. `"[DONE]"`)
+/// * the JSON does not contain at least one candidate with content parts
+///
+/// Otherwise returns `(text, calls)` where `text` is the concatenation of all
+/// [`GeminiPart::Text`] parts and `calls` is a list of [`SseFunctionCall`]
+/// values derived from all [`GeminiPart::FunctionCall`] parts.
+/// [`GeminiPart::FunctionResponse`] parts are ignored.
+pub fn parse_sse_line(data: &str) -> Option<(String, Vec<SseFunctionCall>)> {
+    if data.is_empty() || data.starts_with('[') {
+        return None;
+    }
+
+    let chunk: GeminiStreamChunk = serde_json::from_str(data).ok()?;
+
+    let candidates = chunk.candidates?;
+    let first = candidates.into_iter().next()?;
+    let content = first.content?;
+
+    if content.parts.is_empty() {
+        return None;
+    }
+
+    let mut text = String::new();
+    let mut calls: Vec<SseFunctionCall> = Vec::new();
+
+    for part in content.parts {
+        match part {
+            GeminiPart::Text { text: t } => {
+                text.push_str(&t);
+            }
+            GeminiPart::FunctionCall { function_call } => {
+                calls.push(SseFunctionCall {
+                    id: format!("gemini_call_{}", Uuid::new_v4()),
+                    name: function_call.name,
+                    args: function_call.args,
+                });
+            }
+            GeminiPart::FunctionResponse { .. } => {
+                // Ignored per spec.
+            }
+        }
+    }
+
+    Some((text, calls))
 }
 
 #[cfg(test)]
