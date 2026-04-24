@@ -253,3 +253,104 @@ async fn read_file_error_on_missing_file() {
         .await;
     assert!(result.is_err(), "expected Err for missing file");
 }
+
+// ---------------------------------------------------------------------------
+// GlobTool tests
+// ---------------------------------------------------------------------------
+
+/// Test that glob finds matching .rs files and excludes non-matching files.
+#[tokio::test]
+async fn glob_finds_matching_files() {
+    use amplifier_core::traits::Tool;
+    use amplifier_module_tool_filesystem::GlobTool;
+    use serde_json::json;
+    use std::fs;
+
+    let dir = TempDir::new().unwrap();
+    // Create matching files
+    fs::write(dir.path().join("main.rs"), "fn main() {}").unwrap();
+    fs::write(dir.path().join("lib.rs"), "// lib").unwrap();
+    // Create non-matching file
+    fs::write(dir.path().join("README.md"), "# Readme").unwrap();
+
+    let config = FilesystemConfig::new(dir.path().to_path_buf());
+    let tool = GlobTool::new(config);
+
+    let result = tool
+        .execute(json!({ "pattern": "*.rs" }))
+        .await
+        .unwrap();
+
+    assert!(result.success);
+    let output = result.output.unwrap();
+    let output_str = output.as_str().unwrap();
+
+    // Parse the output as a JSON array of strings
+    let matches: Vec<String> = serde_json::from_str(output_str)
+        .expect("output should be a valid JSON array of strings");
+
+    assert_eq!(matches.len(), 2, "expected 2 matches, got: {:?}", matches);
+
+    // Check that the matches contain expected files
+    assert!(
+        matches.iter().any(|p| p.ends_with("main.rs")),
+        "expected main.rs in matches: {:?}",
+        matches
+    );
+    assert!(
+        matches.iter().any(|p| p.ends_with("lib.rs")),
+        "expected lib.rs in matches: {:?}",
+        matches
+    );
+    // README.md should NOT be included
+    assert!(
+        !matches.iter().any(|p| p.contains("README.md")),
+        "README.md should not be in matches: {:?}",
+        matches
+    );
+}
+
+/// Test that glob returns vault-relative paths (no leading '/' or vault prefix).
+#[tokio::test]
+async fn glob_returns_relative_paths() {
+    use amplifier_core::traits::Tool;
+    use amplifier_module_tool_filesystem::GlobTool;
+    use serde_json::json;
+    use std::fs;
+
+    let dir = TempDir::new().unwrap();
+    // Create a nested file
+    fs::create_dir_all(dir.path().join("src")).unwrap();
+    fs::write(dir.path().join("src/tool.rs"), "// tool").unwrap();
+
+    let config = FilesystemConfig::new(dir.path().to_path_buf());
+    let tool = GlobTool::new(config);
+
+    let result = tool
+        .execute(json!({ "pattern": "**/*.rs" }))
+        .await
+        .unwrap();
+
+    assert!(result.success);
+    let output = result.output.unwrap();
+    let output_str = output.as_str().unwrap();
+
+    let matches: Vec<String> = serde_json::from_str(output_str)
+        .expect("output should be a valid JSON array of strings");
+
+    assert!(!matches.is_empty(), "expected at least one match");
+
+    // Paths must be relative — must NOT start with '/'
+    assert!(
+        !matches[0].starts_with('/'),
+        "path should be relative (no leading '/'), got: {:?}",
+        matches[0]
+    );
+
+    // Must contain 'tool.rs'
+    assert!(
+        matches.iter().any(|p| p.contains("tool.rs")),
+        "expected 'tool.rs' in matches: {:?}",
+        matches
+    );
+}
