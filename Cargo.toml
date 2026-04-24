@@ -11,6 +11,10 @@ members = [
     "crates/amplifier-module-provider-ollama",
     "crates/amplifier-module-tool-web",
     "crates/amplifier-module-tool-todo",
+    "crates/amplifier-module-tool-filesystem",
+    "crates/amplifier-module-tool-bash",
+    "crates/amplifier-module-tool-search",
+    "sandbox/amplifier-android-sandbox",
 ]
 
 [workspace.dependencies]

@@ -12,6 +12,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "amplifier-android-sandbox"
+version = "0.1.0"
+
+[[package]]
 name = "amplifier-core"
 version = "1.3.3"
 source = "git+https://github.com/microsoft/amplifier-core?branch=main#5e3091c4e9b4966d86affa83b146eb16a4c1a562"
@@ -116,6 +120,18 @@ dependencies = [
  "tokio",
  "wiremock",
 ]
+
+[[package]]
+name = "amplifier-module-tool-bash"
+version = "0.1.0"
+
+[[package]]
+name = "amplifier-module-tool-filesystem"
+version = "0.1.0"
+
+[[package]]
+name = "amplifier-module-tool-search"
+version = "0.1.0"
 
 [[package]]
 name = "amplifier-module-tool-skills"

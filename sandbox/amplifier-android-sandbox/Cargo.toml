@@ -1,0 +1,11 @@
+[package]
+    name = "amplifier-android-sandbox"
+    version = "0.1.0"
+    edition = "2021"
+    publish = false
+
+[[bin]]
+name = "amplifier-android-sandbox"
+path = "src/main.rs"
+
+[dependencies]
