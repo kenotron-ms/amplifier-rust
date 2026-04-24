@@ -40,7 +40,10 @@ mod tools;
 // ---------------------------------------------------------------------------
 
 #[derive(Parser)]
-#[command(name = "amplifier-android-sandbox", about = "Amplifier Android Sandbox agent runner")]
+#[command(
+    name = "amplifier-android-sandbox",
+    about = "Amplifier Android Sandbox agent runner"
+)]
 struct Args {
     /// Path to the vault directory
     #[arg(long, default_value = "./vault")]
@@ -90,8 +93,10 @@ fn build_provider(provider_name: &str, model: Option<&str>) -> Result<Box<dyn Pr
             let api_key = std::env::var("ANTHROPIC_API_KEY").with_context(|| {
                 "ANTHROPIC_API_KEY environment variable is required for the anthropic provider"
             })?;
-            let mut config = AnthropicConfig::default();
-            config.api_key = api_key;
+            let mut config = AnthropicConfig {
+                api_key,
+                ..AnthropicConfig::default()
+            };
             if let Some(m) = model {
                 config.model = m.to_string();
             }
@@ -104,8 +109,10 @@ fn build_provider(provider_name: &str, model: Option<&str>) -> Result<Box<dyn Pr
                     "GEMINI_API_KEY or GOOGLE_API_KEY environment variable is required \
                      for the gemini provider"
                 })?;
-            let mut config = GeminiConfig::default();
-            config.api_key = api_key;
+            let mut config = GeminiConfig {
+                api_key,
+                ..GeminiConfig::default()
+            };
             if let Some(m) = model {
                 config.model = m.to_string();
             }
@@ -115,8 +122,10 @@ fn build_provider(provider_name: &str, model: Option<&str>) -> Result<Box<dyn Pr
             let api_key = std::env::var("OPENAI_API_KEY").with_context(|| {
                 "OPENAI_API_KEY environment variable is required for the openai provider"
             })?;
-            let mut config = OpenAIConfig::default();
-            config.api_key = api_key;
+            let mut config = OpenAIConfig {
+                api_key,
+                ..OpenAIConfig::default()
+            };
             if let Some(m) = model {
                 config.model = m.to_string();
             }
@@ -172,8 +181,8 @@ async fn main() -> Result<()> {
     // Step 7: wire TaskTool (backed by the orchestrator as SubagentRunner)
     let task_tool = TaskTool::new(
         Arc::clone(&orch) as Arc<dyn SubagentRunner>,
-        5,  // max_recursion_depth
-        0,  // current_depth (top-level = 0)
+        5, // max_recursion_depth
+        0, // current_depth (top-level = 0)
     );
     tool_map.insert("task".to_string(), Box::new(task_tool));
 
@@ -191,8 +200,7 @@ async fn main() -> Result<()> {
     for (_name, boxed_tool) in tool_map {
         // Box<dyn Tool + Send + Sync> → Arc<dyn Tool + Send + Sync>
         // The coercion is valid because Tool: Send + Sync.
-        let arc_tool: Arc<dyn amplifier_core::traits::Tool + Send + Sync> =
-            Arc::from(boxed_tool);
+        let arc_tool: Arc<dyn amplifier_core::traits::Tool + Send + Sync> = Arc::from(boxed_tool);
         orch.register_tool(arc_tool).await;
     }
 

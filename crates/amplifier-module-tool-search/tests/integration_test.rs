@@ -5,8 +5,8 @@
 //!  - empty result when no matches
 //!  - glob filter restricts results to matching file types
 
-use amplifier_module_tool_search::{GrepCodebaseTool, SearchConfig};
 use amplifier_core::traits::Tool;
+use amplifier_module_tool_search::{GrepCodebaseTool, SearchConfig};
 use serde_json::{json, Value};
 
 // ---------------------------------------------------------------------------
@@ -27,10 +27,7 @@ async fn grep_codebase_finds_matches_in_files() {
     let config = SearchConfig::new(dir.path().to_path_buf());
     let tool = GrepCodebaseTool::new(config);
 
-    let result = tool
-        .execute(json!({ "pattern": "println" }))
-        .await
-        .unwrap();
+    let result = tool.execute(json!({ "pattern": "println" })).await.unwrap();
 
     let output = result.output.unwrap();
     let matches: Vec<Value> = serde_json::from_str(output.as_str().unwrap())
@@ -39,10 +36,7 @@ async fn grep_codebase_finds_matches_in_files() {
     assert!(!matches.is_empty(), "expected at least one match");
     let first = &matches[0];
     assert!(
-        first["content"]
-            .as_str()
-            .unwrap_or("")
-            .contains("println"),
+        first["content"].as_str().unwrap_or("").contains("println"),
         "content should contain 'println', got: {}",
         first["content"]
     );
@@ -111,7 +105,11 @@ async fn grep_codebase_glob_filters_file_types() {
     let matches: Vec<Value> = serde_json::from_str(output.as_str().unwrap())
         .expect("output should be a JSON array string");
 
-    assert_eq!(matches.len(), 1, "expected exactly 1 match (only the .rs file)");
+    assert_eq!(
+        matches.len(),
+        1,
+        "expected exactly 1 match (only the .rs file)"
+    );
     let file = matches[0]["file"].as_str().unwrap_or("");
     assert!(
         file.ends_with(".rs"),

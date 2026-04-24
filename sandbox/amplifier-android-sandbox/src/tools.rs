@@ -66,22 +66,13 @@ pub fn build_registry(vault: &Path) -> anyhow::Result<ToolMap> {
         "grep".to_string(),
         Box::new(GrepTool::new(Arc::clone(&fs_config))),
     );
-    tools.insert(
-        "bash".to_string(),
-        Box::new(BashTool::new(bash_config)),
-    );
-    tools.insert(
-        "web_fetch".to_string(),
-        Box::new(FetchUrlTool::new()),
-    );
+    tools.insert("bash".to_string(), Box::new(BashTool::new(bash_config)));
+    tools.insert("web_fetch".to_string(), Box::new(FetchUrlTool::new()));
     tools.insert(
         "grep_codebase".to_string(),
         Box::new(GrepCodebaseTool::new(search_config)),
     );
-    tools.insert(
-        "todo".to_string(),
-        Box::new(TodoTool::default()),
-    );
+    tools.insert("todo".to_string(), Box::new(TodoTool::default()));
 
     Ok(tools)
 }

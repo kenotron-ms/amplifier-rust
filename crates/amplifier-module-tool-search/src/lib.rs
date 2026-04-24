@@ -75,10 +75,7 @@ impl GrepCodebaseTool {
 // Async implementation helper
 // ---------------------------------------------------------------------------
 
-async fn execute_grep(
-    config: Arc<SearchConfig>,
-    input: Value,
-) -> Result<ToolResult, ToolError> {
+async fn execute_grep(config: Arc<SearchConfig>, input: Value) -> Result<ToolResult, ToolError> {
     // Required: pattern
     let pattern = input
         .get("pattern")
@@ -114,14 +111,9 @@ async fn execute_grep(
         .map(|n| n as usize)
         .unwrap_or(config.max_results);
 
-    let results = ripgrep::grep(
-        &pattern,
-        &search_path,
-        glob_filter.as_deref(),
-        max_results,
-    )
-    .await
-    .map_err(|e| ToolError::Other { message: e })?;
+    let results = ripgrep::grep(&pattern, &search_path, glob_filter.as_deref(), max_results)
+        .await
+        .map_err(|e| ToolError::Other { message: e })?;
 
     let json_string = serde_json::to_string(&results).map_err(|e| ToolError::Other {
         message: format!("serialization error: {}", e),

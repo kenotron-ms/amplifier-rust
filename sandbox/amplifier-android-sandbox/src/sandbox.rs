@@ -48,16 +48,22 @@ pub fn apply(vault_path: &std::path::Path) -> anyhow::Result<()> {
 #[cfg(target_os = "linux")]
 fn apply_landlock(vault_path: &std::path::Path) -> anyhow::Result<()> {
     use landlock::{
-        Access, AccessFs, ABI, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
-        RulesetStatus,
+        Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
+        RulesetStatus, ABI,
     };
 
     let abi = ABI::V3;
     let status = Ruleset::default()
         .handle_access(AccessFs::from_all(abi))?
         .create()?
-        .add_rule(PathBeneath::new(PathFd::new(vault_path)?, AccessFs::from_all(abi)))?
-        .add_rule(PathBeneath::new(PathFd::new("/tmp")?, AccessFs::from_all(abi)))?
+        .add_rule(PathBeneath::new(
+            PathFd::new(vault_path)?,
+            AccessFs::from_all(abi),
+        ))?
+        .add_rule(PathBeneath::new(
+            PathFd::new("/tmp")?,
+            AccessFs::from_all(abi),
+        ))?
         .add_rule(PathBeneath::new(
             PathFd::new("/etc/ssl")?,
             AccessFs::ReadFile | AccessFs::ReadDir,

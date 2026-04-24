@@ -157,10 +157,9 @@ async fn grep_fallback(
         let re = Regex::new(&pattern).map_err(|e| format!("Invalid regex: {}", e))?;
 
         let glob_pat: Option<glob::Pattern> = match &glob_filter {
-            Some(g) => Some(
-                glob::Pattern::new(g)
-                    .map_err(|e| format!("Invalid glob pattern: {}", e))?,
-            ),
+            Some(g) => {
+                Some(glob::Pattern::new(g).map_err(|e| format!("Invalid glob pattern: {}", e))?)
+            }
             None => None,
         };
 
@@ -176,10 +175,7 @@ async fn grep_fallback(
 
             // Apply optional glob filename filter.
             if let Some(ref pat) = glob_pat {
-                let filename = file_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if !pat.matches(filename) {
                     continue;
                 }

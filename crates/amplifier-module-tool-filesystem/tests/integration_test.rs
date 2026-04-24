@@ -27,7 +27,11 @@ async fn write_file_creates_file_and_parent_dirs() {
     // Output should mention the byte count (11 bytes for "hello world").
     let output = result.output.unwrap();
     let s = output.as_str().unwrap();
-    assert!(s.contains("11"), "expected byte count '11' in output: {}", s);
+    assert!(
+        s.contains("11"),
+        "expected byte count '11' in output: {}",
+        s
+    );
 
     // File should exist on disk with correct content.
     let file_path = dir.path().join("subdir/nested/new.txt");
@@ -54,7 +58,10 @@ async fn write_file_denied_outside_vault() {
         }))
         .await;
 
-    assert!(result.is_err(), "expected Err for path traversal outside vault");
+    assert!(
+        result.is_err(),
+        "expected Err for path traversal outside vault"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +101,10 @@ async fn edit_file_replaces_single_occurrence() {
     let content = fs::read_to_string(&file_path).unwrap();
     assert!(content.contains("fn qux()"), "expected 'fn qux()' in file");
     assert!(content.contains("fn bar()"), "expected 'fn bar()' in file");
-    assert!(!content.contains("fn foo()"), "expected 'fn foo()' to be gone");
+    assert!(
+        !content.contains("fn foo()"),
+        "expected 'fn foo()' to be gone"
+    );
 }
 
 /// Test that edit_file replaces all occurrences when replace_all=true.
@@ -193,9 +203,17 @@ async fn read_file_returns_numbered_lines() {
 
     let output = result.output.unwrap();
     let s = output.as_str().unwrap();
-    assert!(s.contains("   1\talpha"), "expected '   1\\talpha' in: {}", s);
+    assert!(
+        s.contains("   1\talpha"),
+        "expected '   1\\talpha' in: {}",
+        s
+    );
     assert!(s.contains("   2\tbeta"), "expected '   2\\tbeta' in: {}", s);
-    assert!(s.contains("   3\tgamma"), "expected '   3\\tgamma' in: {}", s);
+    assert!(
+        s.contains("   3\tgamma"),
+        "expected '   3\\tgamma' in: {}",
+        s
+    );
 }
 
 /// Test that read_file respects offset and limit parameters.
@@ -248,9 +266,7 @@ async fn read_file_error_on_missing_file() {
     let config = FilesystemConfig::new(dir.path().to_path_buf());
     let tool = ReadFileTool::new(config);
 
-    let result = tool
-        .execute(json!({ "path": "nonexistent.txt" }))
-        .await;
+    let result = tool.execute(json!({ "path": "nonexistent.txt" })).await;
     assert!(result.is_err(), "expected Err for missing file");
 }
 
@@ -276,18 +292,15 @@ async fn glob_finds_matching_files() {
     let config = FilesystemConfig::new(dir.path().to_path_buf());
     let tool = GlobTool::new(config);
 
-    let result = tool
-        .execute(json!({ "pattern": "*.rs" }))
-        .await
-        .unwrap();
+    let result = tool.execute(json!({ "pattern": "*.rs" })).await.unwrap();
 
     assert!(result.success);
     let output = result.output.unwrap();
     let output_str = output.as_str().unwrap();
 
     // Parse the output as a JSON array of strings
-    let matches: Vec<String> = serde_json::from_str(output_str)
-        .expect("output should be a valid JSON array of strings");
+    let matches: Vec<String> =
+        serde_json::from_str(output_str).expect("output should be a valid JSON array of strings");
 
     assert_eq!(matches.len(), 2, "expected 2 matches, got: {:?}", matches);
 
@@ -326,17 +339,14 @@ async fn glob_returns_relative_paths() {
     let config = FilesystemConfig::new(dir.path().to_path_buf());
     let tool = GlobTool::new(config);
 
-    let result = tool
-        .execute(json!({ "pattern": "**/*.rs" }))
-        .await
-        .unwrap();
+    let result = tool.execute(json!({ "pattern": "**/*.rs" })).await.unwrap();
 
     assert!(result.success);
     let output = result.output.unwrap();
     let output_str = output.as_str().unwrap();
 
-    let matches: Vec<String> = serde_json::from_str(output_str)
-        .expect("output should be a valid JSON array of strings");
+    let matches: Vec<String> =
+        serde_json::from_str(output_str).expect("output should be a valid JSON array of strings");
 
     assert!(!matches.is_empty(), "expected at least one match");
 
@@ -378,10 +388,7 @@ async fn grep_finds_matching_lines() {
     let config = FilesystemConfig::new(dir.path().to_path_buf());
     let tool = GrepTool::new(config);
 
-    let result = tool
-        .execute(json!({ "pattern": "println" }))
-        .await
-        .unwrap();
+    let result = tool.execute(json!({ "pattern": "println" })).await.unwrap();
 
     assert!(result.success);
     let output = result.output.unwrap();
@@ -467,9 +474,7 @@ async fn grep_invalid_regex_returns_error() {
     let config = FilesystemConfig::new(dir.path().to_path_buf());
     let tool = GrepTool::new(config);
 
-    let result = tool
-        .execute(json!({ "pattern": "[unclosed" }))
-        .await;
+    let result = tool.execute(json!({ "pattern": "[unclosed" })).await;
 
     assert!(result.is_err(), "expected Err for invalid regex pattern");
 }

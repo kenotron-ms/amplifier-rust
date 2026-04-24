@@ -51,10 +51,7 @@ async fn read_file_impl(
         })?;
 
     // Extract optional `offset` (0-based) and `limit`.
-    let offset = input
-        .get("offset")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
+    let offset = input.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
     let limit = input
         .get("limit")
         .and_then(|v| v.as_u64())
@@ -77,14 +74,15 @@ async fn read_file_impl(
     }
 
     // Read the file contents asynchronously.
-    let contents = tokio::fs::read_to_string(&full_path)
-        .await
-        .map_err(|e| ToolError::ExecutionFailed {
-            message: format!("failed to read '{}': {}", path_str, e),
-            stdout: None,
-            stderr: None,
-            exit_code: None,
-        })?;
+    let contents =
+        tokio::fs::read_to_string(&full_path)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed {
+                message: format!("failed to read '{}': {}", path_str, e),
+                stdout: None,
+                stderr: None,
+                exit_code: None,
+            })?;
 
     // Split into lines (strips trailing newline courtesy of `.lines()`).
     let all_lines: Vec<&str> = contents.lines().collect();

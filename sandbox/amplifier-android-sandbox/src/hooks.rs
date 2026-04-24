@@ -4,7 +4,9 @@
 //! `StatusContextHook` for local dev — it prints every lifecycle event to stderr and
 //! returns `HookResult::Continue` without altering orchestrator behaviour.
 
-use amplifier_module_orchestrator_loop_streaming::{Hook, HookContext, HookEvent, HookRegistry, HookResult};
+use amplifier_module_orchestrator_loop_streaming::{
+    Hook, HookContext, HookEvent, HookRegistry, HookResult,
+};
 use async_trait::async_trait;
 
 // ---------------------------------------------------------------------------

@@ -55,10 +55,7 @@ impl GlobTool {
 // Async implementation helper
 // ---------------------------------------------------------------------------
 
-async fn glob_impl(
-    config: Arc<FilesystemConfig>,
-    input: Value,
-) -> Result<ToolResult, ToolError> {
+async fn glob_impl(config: Arc<FilesystemConfig>, input: Value) -> Result<ToolResult, ToolError> {
     // Extract required `pattern` parameter.
     let pattern = input
         .get("pattern")

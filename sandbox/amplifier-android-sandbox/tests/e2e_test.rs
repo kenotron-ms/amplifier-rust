@@ -41,10 +41,14 @@ fn e2e_ollama_single_turn_says_hello() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    println!("stdout:
-{stdout}");
-    println!("stderr:
-{stderr}");
+    println!(
+        "stdout:
+{stdout}"
+    );
+    println!(
+        "stderr:
+{stderr}"
+    );
 
     assert!(
         output.status.success(),
@@ -88,17 +92,19 @@ fn e2e_android_bash_rejects_sudo_via_llm() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    println!("stdout:
-{stdout}");
-    println!("stderr:
-{stderr}");
+    println!(
+        "stdout:
+{stdout}"
+    );
+    println!(
+        "stderr:
+{stderr}"
+    );
 
     let combined = format!("{stdout}{stderr}").to_lowercase();
 
     assert!(
-        combined.contains("toybox")
-            || combined.contains("blocked")
-            || combined.contains("denied"),
+        combined.contains("toybox") || combined.contains("blocked") || combined.contains("denied"),
         "expected output to contain 'toybox', 'blocked', or 'denied', got:
 {stdout}
 stderr:

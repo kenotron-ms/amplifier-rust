@@ -51,10 +51,7 @@ impl GrepTool {
 // Async implementation helper
 // ---------------------------------------------------------------------------
 
-async fn grep_impl(
-    config: Arc<FilesystemConfig>,
-    input: Value,
-) -> Result<ToolResult, ToolError> {
+async fn grep_impl(config: Arc<FilesystemConfig>, input: Value) -> Result<ToolResult, ToolError> {
     // Extract required `pattern` parameter.
     let pattern = input
         .get("pattern")
@@ -75,21 +72,6 @@ async fn grep_impl(
         .get("glob")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-
-    // Extract optional context line parameters (not used in result output yet,
-    // but declared in the tool spec).
-    let _context_before = input
-        .get("-B")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
-    let _context_after = input
-        .get("-A")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
-    let _context_around = input
-        .get("-C")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
 
     // Validate the regex pattern eagerly before offloading.
     Regex::new(&pattern).map_err(|e| ToolError::ExecutionFailed {
@@ -126,10 +108,7 @@ async fn grep_impl(
 
             // Apply glob filename filter if specified.
             if let Some(ref glob_pat) = glob_opt {
-                let filename = file_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 match glob::Pattern::new(glob_pat) {
                     Ok(pat) => {
                         if !pat.matches(filename) {
@@ -182,10 +161,7 @@ async fn grep_impl(
     output.insert("matches".to_string(), Value::Array(results));
 
     if total_count > MAX_RESULTS {
-        output.insert(
-            "total_matches".to_string(),
-            json!(total_count as u64),
-        );
+        output.insert("total_matches".to_string(), json!(total_count as u64));
         output.insert("truncated".to_string(), json!(true));
     }
 
@@ -236,30 +212,6 @@ impl Tool for GrepTool {
             json!({
                 "type": "string",
                 "description": "Optional filename glob filter (e.g. '*.rs') to restrict which files are searched"
-            }),
-        );
-
-        properties.insert(
-            "-A".to_string(),
-            json!({
-                "type": "integer",
-                "description": "Number of context lines to show after each match"
-            }),
-        );
-
-        properties.insert(
-            "-B".to_string(),
-            json!({
-                "type": "integer",
-                "description": "Number of context lines to show before each match"
-            }),
-        );
-
-        properties.insert(
-            "-C".to_string(),
-            json!({
-                "type": "integer",
-                "description": "Number of context lines to show before and after each match"
             }),
         );
 

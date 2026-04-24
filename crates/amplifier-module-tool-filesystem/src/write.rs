@@ -63,6 +63,54 @@ fn nearest_existing_ancestor(path: &Path) -> Option<PathBuf> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Shared vault boundary check
+// ---------------------------------------------------------------------------
+
+/// Assert that `abs_path` is within `vault_root`, resolving symlinks via canonicalization.
+///
+/// Walks up to the nearest existing ancestor of `abs_path` before canonicalizing,
+/// so it works even when the target file does not yet exist.
+async fn assert_within_vault(vault_root: &Path, abs_path: &Path) -> Result<(), ToolError> {
+    let canonical_root =
+        tokio::fs::canonicalize(vault_root)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed {
+                message: format!("Cannot canonicalize vault root: {e}"),
+                stdout: None,
+                stderr: None,
+                exit_code: None,
+            })?;
+
+    let check_path =
+        nearest_existing_ancestor(abs_path).ok_or_else(|| ToolError::ExecutionFailed {
+            message: "Path has no existing ancestor".into(),
+            stdout: None,
+            stderr: None,
+            exit_code: None,
+        })?;
+
+    let canonical_check =
+        tokio::fs::canonicalize(&check_path)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed {
+                message: format!("Cannot canonicalize path: {e}"),
+                stdout: None,
+                stderr: None,
+                exit_code: None,
+            })?;
+
+    if !canonical_check.starts_with(&canonical_root) {
+        return Err(ToolError::ExecutionFailed {
+            message: "Write access denied: path is outside vault root".into(),
+            stdout: None,
+            stderr: None,
+            exit_code: None,
+        });
+    }
+    Ok(())
+}
+
 /// Count non-overlapping occurrences of `needle` in `haystack`.
 fn count_occurrences(haystack: &str, needle: &str) -> usize {
     if needle.is_empty() {
@@ -103,42 +151,8 @@ async fn write_file_impl(
     // Resolve absolute path.
     let abs_path = config.vault_root.join(path_str);
 
-    // Vault boundary check: canonicalize vault_root and nearest existing ancestor of abs_path.
-    let canonical_root =
-        tokio::fs::canonicalize(&config.vault_root)
-            .await
-            .map_err(|e| ToolError::ExecutionFailed {
-                message: format!("failed to canonicalize vault root: {}", e),
-                stdout: None,
-                stderr: None,
-                exit_code: None,
-            })?;
-
-    let ancestor = nearest_existing_ancestor(&abs_path).ok_or_else(|| ToolError::ExecutionFailed {
-        message: "Write access denied: outside vault root".to_string(),
-        stdout: None,
-        stderr: None,
-        exit_code: None,
-    })?;
-
-    let canonical_check =
-        tokio::fs::canonicalize(&ancestor)
-            .await
-            .map_err(|e| ToolError::ExecutionFailed {
-                message: format!("failed to canonicalize path: {}", e),
-                stdout: None,
-                stderr: None,
-                exit_code: None,
-            })?;
-
-    if !canonical_check.starts_with(&canonical_root) {
-        return Err(ToolError::ExecutionFailed {
-            message: "Write access denied: outside vault root".to_string(),
-            stdout: None,
-            stderr: None,
-            exit_code: None,
-        });
-    }
+    // Vault boundary check (also catches symlink escapes).
+    assert_within_vault(&config.vault_root, &abs_path).await?;
 
     // Allowed write paths check.
     if !config
@@ -182,7 +196,11 @@ async fn write_file_impl(
 
     Ok(ToolResult {
         success: true,
-        output: Some(json!(format!("Wrote {} bytes to {}", bytes.len(), path_str))),
+        output: Some(json!(format!(
+            "Wrote {} bytes to {}",
+            bytes.len(),
+            path_str
+        ))),
         error: None,
     })
 }
@@ -225,6 +243,9 @@ async fn edit_file_impl(
     // Resolve absolute path.
     let abs_path = config.vault_root.join(path_str);
 
+    // Vault boundary check (also catches symlink escapes).
+    assert_within_vault(&config.vault_root, &abs_path).await?;
+
     // Allowed write paths check.
     if !config
         .allowed_write_paths
@@ -243,14 +264,15 @@ async fn edit_file_impl(
     }
 
     // Read the file.
-    let content = tokio::fs::read_to_string(&abs_path)
-        .await
-        .map_err(|e| ToolError::ExecutionFailed {
-            message: format!("failed to read '{}': {}", path_str, e),
-            stdout: None,
-            stderr: None,
-            exit_code: None,
-        })?;
+    let content =
+        tokio::fs::read_to_string(&abs_path)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed {
+                message: format!("failed to read '{}': {}", path_str, e),
+                stdout: None,
+                stderr: None,
+                exit_code: None,
+            })?;
 
     // Check old_string is present.
     if !content.contains(old_string) {
@@ -422,5 +444,42 @@ impl Tool for EditFileTool {
     ) -> Pin<Box<dyn Future<Output = Result<ToolResult, ToolError>> + Send + '_>> {
         let config = Arc::clone(&self.config);
         Box::pin(async move { edit_file_impl(config, input).await })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::FilesystemConfig;
+
+    #[tokio::test]
+    async fn edit_file_denied_via_symlink_escape() {
+        // Create a temp dir with a symlink pointing outside it
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let outside_file = outside.path().join("secret.txt");
+        std::fs::write(&outside_file, "secret").unwrap();
+
+        let symlink_path = dir.path().join("escape.txt");
+        std::os::unix::fs::symlink(&outside_file, &symlink_path).unwrap();
+
+        // Build a config rooted at the temp vault dir
+        let config = FilesystemConfig::new(dir.path().to_path_buf());
+        let input = serde_json::json!({
+            "path": "escape.txt",
+            "old_string": "secret",
+            "new_string": "pwned"
+        });
+
+        // edit_file should reject the symlink escape
+        let result = edit_file_impl(config, input).await;
+        assert!(
+            result.is_err(),
+            "edit_file should reject symlink escaping vault"
+        );
     }
 }

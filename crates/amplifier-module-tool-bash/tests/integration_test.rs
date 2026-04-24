@@ -3,8 +3,8 @@
 //! Tests cover safety profiles (Android allowlist, Strict denylist) and
 //! command execution behavior.
 
-use amplifier_module_tool_bash::{BashConfig, BashTool, SafetyProfile};
 use amplifier_core::traits::Tool;
+use amplifier_module_tool_bash::{BashConfig, BashTool, SafetyProfile};
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -21,7 +21,10 @@ fn make_tool(profile: SafetyProfile) -> BashTool {
 #[tokio::test]
 async fn android_profile_allows_toybox_commands() {
     let tool = make_tool(SafetyProfile::Android);
-    let result = tool.execute(json!({"command": "echo hello"})).await.unwrap();
+    let result = tool
+        .execute(json!({"command": "echo hello"}))
+        .await
+        .unwrap();
     let output = result.output.unwrap();
     assert_eq!(output.as_str().unwrap().trim(), "hello");
 }
@@ -30,7 +33,10 @@ async fn android_profile_allows_toybox_commands() {
 #[tokio::test]
 async fn android_profile_rejects_sudo() {
     let tool = make_tool(SafetyProfile::Android);
-    let err = tool.execute(json!({"command": "sudo ls"})).await.unwrap_err();
+    let err = tool
+        .execute(json!({"command": "sudo ls"}))
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("toybox allowlist"),
@@ -43,8 +49,13 @@ async fn android_profile_rejects_sudo() {
 #[tokio::test]
 async fn android_profile_rejects_python() {
     let tool = make_tool(SafetyProfile::Android);
-    let result = tool.execute(json!({"command": r#"python3 -c "print(1)""#})).await;
-    assert!(result.is_err(), "Expected python3 to be rejected by Android profile");
+    let result = tool
+        .execute(json!({"command": r#"python3 -c "print(1)""#}))
+        .await;
+    assert!(
+        result.is_err(),
+        "Expected python3 to be rejected by Android profile"
+    );
     let msg = result.unwrap_err().to_string();
     assert!(
         msg.contains("toybox allowlist"),
