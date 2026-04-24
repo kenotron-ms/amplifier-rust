@@ -333,4 +333,38 @@ mod tests {
         assert_eq!(history.len(), 1, "history must survive multiple messages_for_provider calls");
         assert_eq!(history[0], history_msg);
     }
+
+    // -----------------------------------------------------------------------
+    // Token count tests (tiktoken-rs cl100k_base)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn token_count_is_zero_for_empty_context() {
+        assert_eq!(SimpleContext::new(vec![]).token_count(), 0);
+    }
+
+    #[test]
+    fn token_count_is_nonzero_for_nonempty_context() {
+        let ctx = SimpleContext::new(vec![
+            json!({"role": "user", "content": "Hello, how are you today?"}),
+        ]);
+        let count = ctx.token_count();
+        assert!(count > 0, "token count should be > 0 for non-empty context, got {count}");
+        assert!(count < 100, "token count should be < 100 for a short message, got {count}");
+    }
+
+    #[test]
+    fn token_count_grows_with_more_messages() {
+        let ctx = SimpleContext::new(vec![json!({"role": "user", "content": "Hello"})]);
+        let count_before = ctx.token_count();
+        ctx.push_turn(
+            json!({"role": "user", "content": "What is the weather today?"}),
+            json!({"role": "assistant", "content": "I don't have access to real-time weather data."}),
+        );
+        let count_after = ctx.token_count();
+        assert!(
+            count_after > count_before,
+            "token count should increase after push_turn: before={count_before}, after={count_after}"
+        );
+    }
 }
