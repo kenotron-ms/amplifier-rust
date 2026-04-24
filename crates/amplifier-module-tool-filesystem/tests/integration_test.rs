@@ -354,3 +354,122 @@ async fn glob_returns_relative_paths() {
         matches
     );
 }
+
+// ---------------------------------------------------------------------------
+// GrepTool tests
+// ---------------------------------------------------------------------------
+
+/// Test that grep finds matching lines and returns structured JSON output.
+#[tokio::test]
+async fn grep_finds_matching_lines() {
+    use amplifier_core::traits::Tool;
+    use amplifier_module_tool_filesystem::GrepTool;
+    use serde_json::json;
+    use std::fs;
+
+    let dir = TempDir::new().unwrap();
+    // Create a Rust file with two println! lines
+    fs::write(
+        dir.path().join("main.rs"),
+        "fn main() {\n    println!(\"hello\");\n    println!(\"world\");\n}\n",
+    )
+    .unwrap();
+
+    let config = FilesystemConfig::new(dir.path().to_path_buf());
+    let tool = GrepTool::new(config);
+
+    let result = tool
+        .execute(json!({ "pattern": "println" }))
+        .await
+        .unwrap();
+
+    assert!(result.success);
+    let output = result.output.unwrap();
+    let matches = output
+        .get("matches")
+        .expect("output should have 'matches' key")
+        .as_array()
+        .expect("'matches' should be an array");
+    assert_eq!(matches.len(), 2, "expected 2 matches, got: {:?}", matches);
+    let content = matches[0]
+        .get("content")
+        .expect("match should have 'content'")
+        .as_str()
+        .expect("'content' should be a string");
+    assert!(
+        content.contains("println"),
+        "expected 'println' in content: {}",
+        content
+    );
+}
+
+/// Test that grep caps results at 200 and reports total_matches + truncated.
+#[tokio::test]
+async fn grep_truncates_at_200_matches() {
+    use amplifier_core::traits::Tool;
+    use amplifier_module_tool_filesystem::GrepTool;
+    use serde_json::json;
+    use std::fs;
+
+    let dir = TempDir::new().unwrap();
+    // Write 250 matching lines
+    let mut content = String::new();
+    for i in 0..250 {
+        content.push_str(&format!("match line {}\n", i));
+    }
+    fs::write(dir.path().join("large.txt"), &content).unwrap();
+
+    let config = FilesystemConfig::new(dir.path().to_path_buf());
+    let tool = GrepTool::new(config);
+
+    let result = tool
+        .execute(json!({ "pattern": "match line" }))
+        .await
+        .unwrap();
+
+    assert!(result.success);
+    let output = result.output.unwrap();
+    let matches = output
+        .get("matches")
+        .expect("output should have 'matches' key")
+        .as_array()
+        .expect("'matches' should be an array");
+    assert_eq!(
+        matches.len(),
+        200,
+        "expected 200 matches (capped), got: {}",
+        matches.len()
+    );
+
+    let total = output
+        .get("total_matches")
+        .expect("output should have 'total_matches' key")
+        .as_u64()
+        .expect("'total_matches' should be a number");
+    assert_eq!(total, 250, "expected total_matches == 250, got: {}", total);
+
+    let truncated = output
+        .get("truncated")
+        .expect("output should have 'truncated' key")
+        .as_bool()
+        .expect("'truncated' should be a bool");
+    assert!(truncated, "expected truncated == true");
+}
+
+/// Test that grep returns an error for an invalid regex pattern.
+#[tokio::test]
+async fn grep_invalid_regex_returns_error() {
+    use amplifier_core::traits::Tool;
+    use amplifier_module_tool_filesystem::GrepTool;
+    use serde_json::json;
+
+    let dir = TempDir::new().unwrap();
+    let config = FilesystemConfig::new(dir.path().to_path_buf());
+    let tool = GrepTool::new(config);
+
+    let result = tool
+        .execute(json!({ "pattern": "[unclosed" }))
+        .await;
+
+    assert!(result.is_err(), "expected Err for invalid regex pattern");
+}
