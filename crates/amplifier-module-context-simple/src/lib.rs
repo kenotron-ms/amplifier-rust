@@ -284,4 +284,53 @@ mod tests {
             "compact_if_needed should have removed messages"
         );
     }
+
+    // -----------------------------------------------------------------------
+    // Ephemeral queue tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ephemeral_not_in_get_messages() {
+        let ctx = SimpleContext::new(vec![]);
+        ctx.push_ephemeral(json!({"role": "system", "content": "ephemeral only"}));
+        // get_messages returns only persistent history — ephemeral must not appear.
+        let got = rt().block_on(ctx.get_messages()).unwrap();
+        assert!(got.is_empty(), "ephemeral must not leak into get_messages");
+    }
+
+    #[test]
+    fn messages_for_provider_includes_ephemeral() {
+        let history_msg = json!({"role": "user", "content": "history"});
+        let ephemeral_msg = json!({"role": "system", "content": "ephemeral"});
+        let ctx = SimpleContext::new(vec![history_msg.clone()]);
+        ctx.push_ephemeral(ephemeral_msg.clone());
+        let result = ctx.messages_for_provider();
+        assert_eq!(result.len(), 2, "should contain history + ephemeral");
+        assert_eq!(result[0], history_msg, "first element must be history");
+        assert_eq!(result[1], ephemeral_msg, "second element must be ephemeral");
+    }
+
+    #[test]
+    fn messages_for_provider_clears_ephemeral_after_call() {
+        let ctx = SimpleContext::new(vec![]);
+        ctx.push_ephemeral(json!({"role": "system", "content": "one-shot"}));
+        // First call: ephemeral is included.
+        let first = ctx.messages_for_provider();
+        assert_eq!(first.len(), 1, "first call must include the ephemeral message");
+        // Second call: ephemeral was cleared.
+        let second = ctx.messages_for_provider();
+        assert_eq!(second.len(), 0, "second call must be empty after ephemeral cleared");
+    }
+
+    #[test]
+    fn messages_for_provider_history_not_cleared() {
+        let history_msg = json!({"role": "user", "content": "persistent"});
+        let ctx = SimpleContext::new(vec![history_msg.clone()]);
+        // Call twice to verify history survives both calls.
+        let _ = ctx.messages_for_provider();
+        let _ = ctx.messages_for_provider();
+        let history = rt().block_on(ctx.get_messages()).unwrap();
+        assert_eq!(history.len(), 1, "history must survive multiple messages_for_provider calls");
+        assert_eq!(history[0], history_msg);
+    }
 }
