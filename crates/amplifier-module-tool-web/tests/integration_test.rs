@@ -1,4 +1,5 @@
 use amplifier_module_tool_web::fetch::strip_html;
+use amplifier_module_tool_web::search::parse_ddg_results;
 
 /// Verifies that <script> tags and their content are completely removed,
 /// while other HTML content is preserved.
@@ -74,4 +75,55 @@ fn strip_html_plain_text_passthrough() {
     let text = "Just plain text without any HTML tags.";
     let result = strip_html(text);
     assert_eq!(result, text, "plain text should pass through unchanged");
+}
+
+// ---------------------------------------------------------------------------
+// DDG parsing tests (Task 9)
+// ---------------------------------------------------------------------------
+
+/// Tests that parse_ddg_results correctly extracts title, decoded url, and
+/// snippet from HTML with two .result blocks.
+#[test]
+fn ddg_parse_extracts_title_url_snippet() {
+    let html = r#"
+<div class="result">
+  <a class="result__a" href="/l/?uddg=https%3A%2F%2Fexample.com%2Fpage1">Title One</a>
+  <span class="result__url">example.com/page1</span>
+  <a class="result__snippet" href="/l/?something=else">Snippet text for result one.</a>
+</div>
+<div class="result">
+  <a class="result__a" href="/l/?uddg=https%3A%2F%2Fother.org%2Fpath">Title Two</a>
+  <span class="result__url">other.org/path</span>
+  <a class="result__snippet" href="/l/?something=else2">Snippet text for result two.</a>
+</div>
+"#;
+    let results = parse_ddg_results(html, 10);
+    assert_eq!(results.len(), 2, "should return 2 results");
+    assert_eq!(results[0]["title"], "Title One");
+    assert_eq!(results[0]["url"], "https://example.com/page1");
+    assert_eq!(results[0]["snippet"], "Snippet text for result one.");
+    assert_eq!(results[1]["title"], "Title Two");
+    assert_eq!(results[1]["url"], "https://other.org/path");
+    assert_eq!(results[1]["snippet"], "Snippet text for result two.");
+}
+
+/// Tests that num_results limits how many items are returned.
+#[test]
+fn ddg_parse_respects_num_results_limit() {
+    let mut html = String::new();
+    for i in 1..=10 {
+        html.push_str(&format!(
+            r#"<div class="result"><a class="result__a" href="/l/?uddg=https%3A%2F%2Fexample{}.com%2F">Title {}</a><a class="result__snippet">Snippet {}.</a></div>"#,
+            i, i, i
+        ));
+    }
+    let results = parse_ddg_results(&html, 3);
+    assert_eq!(results.len(), 3, "should respect num_results limit of 3");
+}
+
+/// Tests that empty HTML returns an empty result vector.
+#[test]
+fn ddg_parse_empty_html_returns_empty() {
+    let results = parse_ddg_results("", 5);
+    assert!(results.is_empty(), "empty HTML should return empty results");
 }
