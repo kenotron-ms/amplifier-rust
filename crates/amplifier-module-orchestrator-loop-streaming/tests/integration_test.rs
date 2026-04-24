@@ -166,7 +166,10 @@ impl Provider for ToolCallingProvider {
             .content
             .iter()
             .filter_map(|block| {
-                if let ContentBlock::ToolCall { id, name, input, .. } = block {
+                if let ContentBlock::ToolCall {
+                    id, name, input, ..
+                } = block
+                {
                     Some(ToolCall {
                         id: id.clone(),
                         name: name.clone(),
@@ -347,22 +350,20 @@ async fn execute_returns_provider_text_on_end_turn() {
     let received_tokens_clone = received_tokens.clone();
 
     let result = orchestrator
-        .execute(
-            "What is 6×7?".to_string(),
-            &mut ctx,
-            &hooks,
-            move |token| {
-                received_tokens_clone
-                    .lock()
-                    .unwrap()
-                    .push(token.to_string());
-            },
-        )
+        .execute("What is 6×7?".to_string(), &mut ctx, &hooks, move |token| {
+            received_tokens_clone
+                .lock()
+                .unwrap()
+                .push(token.to_string());
+        })
         .await;
 
     assert!(result.is_ok(), "Expected Ok result, got: {:?}", result);
     let text = result.unwrap();
-    assert_eq!(text, "The answer is 42.", "Result text must match provider response");
+    assert_eq!(
+        text, "The answer is 42.",
+        "Result text must match provider response"
+    );
 
     let tokens = received_tokens.lock().unwrap();
     assert!(

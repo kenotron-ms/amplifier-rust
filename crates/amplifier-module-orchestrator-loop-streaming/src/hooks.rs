@@ -253,7 +253,11 @@ mod tests {
             .emit(HookEvent::ToolPre, serde_json::json!({}))
             .await;
 
-        assert_eq!(results.len(), 1, "one result expected for one subscribed hook");
+        assert_eq!(
+            results.len(),
+            1,
+            "one result expected for one subscribed hook"
+        );
         assert_eq!(results[0], HookResult::Continue);
         assert_eq!(
             count.load(Ordering::SeqCst),
@@ -265,7 +269,9 @@ mod tests {
     #[tokio::test]
     async fn emit_returns_inject_context_result() {
         let mut registry = HookRegistry::new();
-        registry.register(Box::new(InjectingHook::new(vec![HookEvent::ProviderRequest])));
+        registry.register(Box::new(InjectingHook::new(vec![
+            HookEvent::ProviderRequest,
+        ])));
 
         let results = registry
             .emit(HookEvent::ProviderRequest, serde_json::json!({}))

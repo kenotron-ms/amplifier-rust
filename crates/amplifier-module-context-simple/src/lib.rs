@@ -316,10 +316,18 @@ mod tests {
         ctx.push_ephemeral(json!({"role": "system", "content": "one-shot"}));
         // First call: ephemeral is included.
         let first = ctx.messages_for_provider();
-        assert_eq!(first.len(), 1, "first call must include the ephemeral message");
+        assert_eq!(
+            first.len(),
+            1,
+            "first call must include the ephemeral message"
+        );
         // Second call: ephemeral was cleared.
         let second = ctx.messages_for_provider();
-        assert_eq!(second.len(), 0, "second call must be empty after ephemeral cleared");
+        assert_eq!(
+            second.len(),
+            0,
+            "second call must be empty after ephemeral cleared"
+        );
     }
 
     #[test]
@@ -330,7 +338,11 @@ mod tests {
         let _ = ctx.messages_for_provider();
         let _ = ctx.messages_for_provider();
         let history = rt().block_on(ctx.get_messages()).unwrap();
-        assert_eq!(history.len(), 1, "history must survive multiple messages_for_provider calls");
+        assert_eq!(
+            history.len(),
+            1,
+            "history must survive multiple messages_for_provider calls"
+        );
         assert_eq!(history[0], history_msg);
     }
 
@@ -344,7 +356,11 @@ mod tests {
         let ctx = SimpleContext::new(vec![json!({"role": "user", "content": "hello"})]);
         ctx.compact_if_needed(100_000);
         let remaining = rt().block_on(ctx.get_messages()).unwrap();
-        assert_eq!(remaining.len(), 1, "no messages should be dropped when under threshold");
+        assert_eq!(
+            remaining.len(),
+            1,
+            "no messages should be dropped when under threshold"
+        );
     }
 
     #[test]
@@ -369,7 +385,10 @@ mod tests {
         let ctx = SimpleContext::new(vec![]);
         ctx.compact_if_needed(0); // must not panic
         let remaining = rt().block_on(ctx.get_messages()).unwrap();
-        assert!(remaining.is_empty(), "empty context must stay empty after compact_if_needed");
+        assert!(
+            remaining.is_empty(),
+            "empty context must stay empty after compact_if_needed"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -387,8 +406,14 @@ mod tests {
             json!({"role": "user", "content": "Hello, how are you today?"}),
         ]);
         let count = ctx.token_count();
-        assert!(count > 0, "token count should be > 0 for non-empty context, got {count}");
-        assert!(count < 100, "token count should be < 100 for a short message, got {count}");
+        assert!(
+            count > 0,
+            "token count should be > 0 for non-empty context, got {count}"
+        );
+        assert!(
+            count < 100,
+            "token count should be < 100 for a short message, got {count}"
+        );
     }
 
     #[test]

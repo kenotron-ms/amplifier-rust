@@ -453,8 +453,7 @@ mod tests {
     fn loop_config_default_max_steps_is_10() {
         let config = LoopConfig::default();
         assert_eq!(
-            config.max_steps,
-            10,
+            config.max_steps, 10,
             "LoopConfig::default() should have max_steps = 10"
         );
         assert!(

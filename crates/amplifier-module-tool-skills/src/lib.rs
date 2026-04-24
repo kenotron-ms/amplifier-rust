@@ -234,7 +234,9 @@ impl SkillEngine {
                 let skill_name = input
                     .get("skill_name")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow::anyhow!("skill_name is required for 'info' operation"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("skill_name is required for 'info' operation")
+                    })?;
                 self.handle_info(skill_name)
             }
             "load" => {
@@ -402,6 +404,7 @@ Analyze this codebase deeply and report findings.
 
     // --- Mock runner ---
 
+    #[allow(dead_code)]
     struct MockRunner {
         response: String,
     }
@@ -456,7 +459,10 @@ Analyze this codebase deeply and report findings.
         assert_eq!(skills.len(), 2, "expected 2 skills, found {}", skills.len());
 
         let names: Vec<&str> = skills.iter().map(|s| s.frontmatter.name.as_str()).collect();
-        assert!(names.contains(&"git-workflow"), "missing git-workflow skill");
+        assert!(
+            names.contains(&"git-workflow"),
+            "missing git-workflow skill"
+        );
         assert!(names.contains(&"code-review"), "missing code-review skill");
     }
 

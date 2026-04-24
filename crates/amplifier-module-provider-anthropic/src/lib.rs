@@ -110,15 +110,18 @@ impl AnthropicProvider {
         let status_code = response.status().as_u16();
 
         if response.status().is_success() {
-            response.json::<Value>().await.map_err(|e| ProviderError::Other {
-                message: format!("Failed to parse response body: {e}"),
-                provider: Some("anthropic".to_string()),
-                model: None,
-                retry_after: None,
-                status_code: None,
-                retryable: false,
-                delay_multiplier: None,
-            })
+            response
+                .json::<Value>()
+                .await
+                .map_err(|e| ProviderError::Other {
+                    message: format!("Failed to parse response body: {e}"),
+                    provider: Some("anthropic".to_string()),
+                    model: None,
+                    retry_after: None,
+                    status_code: None,
+                    retryable: false,
+                    delay_multiplier: None,
+                })
         } else {
             let error_body: Value = response.json().await.unwrap_or(json!({}));
             let error_msg = error_body
@@ -482,17 +485,9 @@ impl Provider for AnthropicProvider {
 
             // Parse usage (cache tokens are mapped from Anthropic's field names).
             let usage = response.get("usage").map(|u| {
-                let input_tokens = u
-                    .get("input_tokens")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
-                let output_tokens = u
-                    .get("output_tokens")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
-                let cache_read_tokens = u
-                    .get("cache_read_input_tokens")
-                    .and_then(|v| v.as_i64());
+                let input_tokens = u.get("input_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+                let output_tokens = u.get("output_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+                let cache_read_tokens = u.get("cache_read_input_tokens").and_then(|v| v.as_i64());
                 let cache_write_tokens = u
                     .get("cache_creation_input_tokens")
                     .and_then(|v| v.as_i64());
@@ -653,10 +648,7 @@ mod tests {
     fn build_anthropic_tools_format() {
         let mut parameters = HashMap::new();
         parameters.insert("type".to_string(), json!("object"));
-        parameters.insert(
-            "properties".to_string(),
-            json!({"x": {"type": "integer"}}),
-        );
+        parameters.insert("properties".to_string(), json!({"x": {"type": "integer"}}));
 
         let tools = vec![ToolSpec {
             name: "add".to_string(),
