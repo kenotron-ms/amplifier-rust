@@ -97,6 +97,15 @@ version = "0.1.0"
 [[package]]
 name = "amplifier-module-provider-openai"
 version = "0.1.0"
+dependencies = [
+ "amplifier-core",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "wiremock",
+]
 
 [[package]]
 name = "amplifier-module-tool-skills"
