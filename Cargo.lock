@@ -15,6 +15,7 @@ dependencies = [
 name = "amplifier-android-sandbox"
 version = "0.1.0"
 dependencies = [
+ "amplifier-core",
  "amplifier-module-context-simple",
  "amplifier-module-orchestrator-loop-streaming",
  "amplifier-module-provider-anthropic",
@@ -34,6 +35,7 @@ dependencies = [
  "landlock",
  "libseccomp",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 
