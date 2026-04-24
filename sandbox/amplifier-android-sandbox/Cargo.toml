@@ -1,11 +1,33 @@
 [package]
-    name = "amplifier-android-sandbox"
-    version = "0.1.0"
-    edition = "2021"
-    publish = false
+name = "amplifier-android-sandbox"
+version = "0.1.0"
+edition = "2021"
+publish = false
 
 [[bin]]
 name = "amplifier-android-sandbox"
 path = "src/main.rs"
 
 [dependencies]
+amplifier-module-tool-filesystem = { path = "../../crates/amplifier-module-tool-filesystem" }
+amplifier-module-tool-bash = { path = "../../crates/amplifier-module-tool-bash" }
+amplifier-module-tool-web = { path = "../../crates/amplifier-module-tool-web" }
+amplifier-module-tool-search = { path = "../../crates/amplifier-module-tool-search" }
+amplifier-module-tool-task = { path = "../../crates/amplifier-module-tool-task" }
+amplifier-module-tool-skills = { path = "../../crates/amplifier-module-tool-skills" }
+amplifier-module-tool-todo = { path = "../../crates/amplifier-module-tool-todo" }
+amplifier-module-orchestrator-loop-streaming = { path = "../../crates/amplifier-module-orchestrator-loop-streaming" }
+amplifier-module-context-simple = { path = "../../crates/amplifier-module-context-simple" }
+amplifier-module-provider-anthropic = { path = "../../crates/amplifier-module-provider-anthropic" }
+amplifier-module-provider-ollama = { path = "../../crates/amplifier-module-provider-ollama" }
+amplifier-module-provider-gemini = { path = "../../crates/amplifier-module-provider-gemini" }
+amplifier-module-provider-openai = { path = "../../crates/amplifier-module-provider-openai" }
+clap = { version = "4", features = ["derive"] }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"
+libseccomp = "0.3"
