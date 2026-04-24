@@ -335,6 +335,44 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // compact_if_needed tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn compact_if_needed_noop_when_under_threshold() {
+        // One message, very high threshold — nothing should be dropped.
+        let ctx = SimpleContext::new(vec![json!({"role": "user", "content": "hello"})]);
+        ctx.compact_if_needed(100_000);
+        let remaining = rt().block_on(ctx.get_messages()).unwrap();
+        assert_eq!(remaining.len(), 1, "no messages should be dropped when under threshold");
+    }
+
+    #[test]
+    fn compact_if_needed_drops_messages_when_over_threshold() {
+        // 20 messages, tiny threshold of 5 tokens — some must be dropped.
+        let msgs: Vec<Value> = (0..20)
+            .map(|i| json!({"role": "user", "content": format!("message number {i}")}))
+            .collect();
+        let ctx = SimpleContext::new(msgs);
+        ctx.compact_if_needed(5);
+        let remaining = rt().block_on(ctx.get_messages()).unwrap();
+        assert!(
+            remaining.len() < 20,
+            "compact_if_needed should have dropped messages when over threshold, but len={}",
+            remaining.len()
+        );
+    }
+
+    #[test]
+    fn compact_if_needed_noop_on_empty_context() {
+        // Empty history with threshold=0 — must not panic and must stay empty.
+        let ctx = SimpleContext::new(vec![]);
+        ctx.compact_if_needed(0); // must not panic
+        let remaining = rt().block_on(ctx.get_messages()).unwrap();
+        assert!(remaining.is_empty(), "empty context must stay empty after compact_if_needed");
+    }
+
+    // -----------------------------------------------------------------------
     // Token count tests (tiktoken-rs cl100k_base)
     // -----------------------------------------------------------------------
 
