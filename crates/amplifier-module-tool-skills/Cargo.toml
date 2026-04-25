@@ -1,11 +1,21 @@
 [package]
 name = "amplifier-module-tool-skills"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Skill loader and dispatch tool for the Amplifier agent framework"
+readme = "README.md"
+keywords = ["amplifier", "ai", "agent", "tool", "skills"]
+categories = ["asynchronous"]
+documentation = "https://docs.rs/amplifier-module-tool-skills"
 
 [dependencies]
 amplifier-core = { workspace = true }
-amplifier-module-tool-task = { path = "../amplifier-module-tool-task" }
+amplifier-module-tool-task = { path = "../amplifier-module-tool-task", version = "0.1.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
