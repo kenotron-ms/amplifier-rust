@@ -21,6 +21,15 @@ members = [
     "amplifier-agent-foundation",
 ]
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/kenotron-ms/amplifier-rust"
+homepage = "https://github.com/kenotron-ms/amplifier-rust"
+authors = ["Amplifier Contributors"]
+rust-version = "1.75"
+
 [workspace.dependencies]
 amplifier-core = { git = "https://github.com/microsoft/amplifier-core", branch = "main" }
 tokio = { version = "1", features = ["full"] }
@@ -37,5 +46,5 @@ uuid = { version = "1", features = ["v4"] }
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
-amplifier-module-agent-runtime = { path = "crates/amplifier-module-agent-runtime" }
-amplifier-agent-foundation = { path = "amplifier-agent-foundation" }
+amplifier-module-agent-runtime = { path = "crates/amplifier-module-agent-runtime", version = "0.1.0" }
+amplifier-agent-foundation = { path = "amplifier-agent-foundation", version = "0.1.0" }
