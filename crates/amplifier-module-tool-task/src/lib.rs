@@ -80,25 +80,45 @@ pub struct SpawnRequest {
 }
 
 // ---------------------------------------------------------------------------
+// SpawnResult
+// ---------------------------------------------------------------------------
+
+/// Result of a sub-agent run or resume.
+///
+/// Carries both the response text and the session ID so callers can persist
+/// or resume later.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpawnResult {
+    /// The text response from the sub-agent.
+    pub response: String,
+    /// The session ID used for this run (enables future resume calls).
+    pub session_id: String,
+}
+
+// ---------------------------------------------------------------------------
 // SubagentRunner
 // ---------------------------------------------------------------------------
 
-/// Interface for executing a sub-agent.
+/// Trait for running sub-agent sessions.
 ///
-/// Implementors are responsible for actually launching the sub-agent and
-/// returning its final response string.
-///
-/// # Object safety
-///
-/// This trait is object-safe: `Arc<dyn SubagentRunner>` is the standard
-/// storage type.
+/// Implementors drive a sub-agent to completion and return its text response.
 #[async_trait::async_trait]
 pub trait SubagentRunner: Send + Sync {
     /// Run a sub-agent with the given request.
-    ///
-    /// Returns the final response string on success, or an [`anyhow::Error`]
-    /// on failure.
     async fn run(&self, req: SpawnRequest) -> anyhow::Result<String>;
+
+    /// Resume an existing session by `session_id`, appending `instruction`
+    /// as the next user turn.
+    ///
+    /// The default implementation returns `Err("resume not supported")`.
+    /// Implementors with a session store should override this.
+    async fn resume(
+        &self,
+        _session_id: &str,
+        _instruction: String,
+    ) -> anyhow::Result<SpawnResult> {
+        anyhow::bail!("resume not supported by this runner")
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -444,5 +464,31 @@ mod tests {
             ContextDepth::Recent(5),
             "expected ContextDepth::Recent(5) for 'recent_5' input"
         );
+    }
+
+    // --- Test 8: subagent_runner_resume_default_returns_unsupported ---
+
+    #[tokio::test]
+    async fn subagent_runner_resume_default_returns_unsupported() {
+        // SuccessRunner should have the default resume() impl which returns an error.
+        let runner = SuccessRunner { response: "ignored".into() };
+        let res = runner.resume("sid", "do more".to_string()).await;
+        let err = res.expect_err("default resume must return Err");
+        assert!(
+            err.to_string().to_lowercase().contains("resume not supported"),
+            "expected 'resume not supported', got: {err}"
+        );
+    }
+
+    // --- Test 9: spawn_result_constructible ---
+
+    #[test]
+    fn spawn_result_constructible() {
+        let r = SpawnResult {
+            response: "hi".into(),
+            session_id: "s".into(),
+        };
+        assert_eq!(r.response, "hi");
+        assert_eq!(r.session_id, "s");
     }
 }
