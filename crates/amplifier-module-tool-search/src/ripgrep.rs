@@ -7,7 +7,7 @@
 //! ```
 //!
 //! The public entry point [`grep`] tries `rg` first and falls back to the
-//! pure-Rust [`grep_fallback`] implementation on any error (e.g. `rg` not
+//! pure-Rust `grep_fallback` implementation on any error (e.g. `rg` not
 //! installed).
 
 use std::path::Path;

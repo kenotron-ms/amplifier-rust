@@ -1,6 +1,6 @@
 //! Tool registry for the amplifier-android-sandbox.
 //!
-//! [`TaskTool`] and [`SkillsTool`] are wired in main.rs after orchestrator
+//! `TaskTool` and `SkillsTool` are wired in main.rs after orchestrator
 //! creation, since they require a reference to the orchestrator itself.
 
 use std::collections::HashMap;

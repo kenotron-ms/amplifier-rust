@@ -1,6 +1,6 @@
 //! Gemini Developer API wire types.
 //!
-//! Endpoint: POST https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}
+//! Endpoint: POST `https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}`
 //! Auth: query param `key=` (NOT Authorization header).
 
 use serde::{Deserialize, Serialize};
