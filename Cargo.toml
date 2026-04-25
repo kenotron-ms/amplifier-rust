@@ -18,7 +18,6 @@ members = [
     "crates/amplifier-module-agent-runtime",
     "crates/amplifier-module-tool-delegate",
     "crates/amplifier-module-session-store",
-    "amplifier-agent-foundation",
 ]
 
 [workspace.package]
@@ -47,4 +46,3 @@ rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
 amplifier-module-agent-runtime = { path = "crates/amplifier-module-agent-runtime", version = "0.1.0" }
-amplifier-agent-foundation = { path = "amplifier-agent-foundation", version = "0.1.0" }

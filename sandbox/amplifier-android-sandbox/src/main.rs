@@ -24,7 +24,6 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use amplifier_agent_foundation::foundation_agents;
 use amplifier_core::traits::Provider;
 use amplifier_module_agent_runtime::AgentRegistry;
 use amplifier_module_context_simple::SimpleContext;
@@ -198,10 +197,26 @@ async fn main() -> Result<()> {
     let skills_tool = SkillEngine::new(&args.vault);
     tool_map.insert("skills".to_string(), Box::new(skills_tool));
 
-    // Step 10: build AgentRegistry
+    // Step 10: build AgentRegistry — embed foundation agents from agents/*.md at
+    // compile time so the binary is self-contained.  Users override any agent by
+    // dropping a same-named .md file into their vault's .agents/ dir or into
+    // ~/.amplifier/agents/ (loaded below, highest priority wins on name clash).
     let mut agent_registry = AgentRegistry::new();
-    for agent in foundation_agents() {
-        agent_registry.register(agent);
+
+    const FOUNDATION_AGENTS: &[&str] = &[
+        include_str!("../../../agents/explorer.md"),
+        include_str!("../../../agents/zen-architect.md"),
+        include_str!("../../../agents/bug-hunter.md"),
+        include_str!("../../../agents/git-ops.md"),
+        include_str!("../../../agents/modular-builder.md"),
+        include_str!("../../../agents/security-guardian.md"),
+    ];
+    let mut foundation_count = 0;
+    for content in FOUNDATION_AGENTS {
+        if let Some(config) = amplifier_module_agent_runtime::parse_agent_content(content) {
+            agent_registry.register(config);
+            foundation_count += 1;
+        }
     }
 
     let vault_agents_dir = args.vault.join(".agents");
@@ -223,7 +238,7 @@ async fn main() -> Result<()> {
     };
 
     eprintln!(
-        "[sandbox] agent registry: 6 foundation + {vault_count} vault + {global_count} global"
+        "[sandbox] agent registry: {foundation_count} foundation + {vault_count} vault + {global_count} global"
     );
     let registry = std::sync::Arc::new(agent_registry);
 

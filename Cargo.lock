@@ -12,17 +12,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "amplifier-agent-foundation"
-version = "0.1.0"
-dependencies = [
- "amplifier-module-agent-runtime",
-]
-
-[[package]]
 name = "amplifier-android-sandbox"
 version = "0.1.0"
 dependencies = [
- "amplifier-agent-foundation",
  "amplifier-core",
  "amplifier-module-agent-runtime",
  "amplifier-module-context-simple",

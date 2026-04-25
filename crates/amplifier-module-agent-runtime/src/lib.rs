@@ -115,7 +115,7 @@ impl AgentRegistry {
             };
 
             // Parse the agent file — skip silently on error.
-            if let Some(config) = parse_agent_file(&content) {
+            if let Some(config) = parse_agent_content(&content) {
                 self.register(config);
                 count += 1;
             }
@@ -129,11 +129,14 @@ impl AgentRegistry {
 // Minimal agent file parser
 // ---------------------------------------------------------------------------
 
-/// Parse YAML frontmatter from an agent bundle `.md` file into an [`AgentConfig`].
+/// Parse YAML frontmatter from an agent bundle `.md` file content into an [`AgentConfig`].
 ///
-/// Returns `None` if the file cannot be parsed (missing frontmatter delimiters,
+/// Returns `None` if the content cannot be parsed (missing frontmatter delimiters,
 /// missing `meta.name`, or YAML parse error).
-fn parse_agent_file(content: &str) -> Option<AgentConfig> {
+///
+/// This is useful for loading agents from embedded `include_str!()` content as well
+/// as from files read at runtime.
+pub fn parse_agent_content(content: &str) -> Option<AgentConfig> {
     // Strip UTF-8 BOM if present.
     let content = content.strip_prefix('\u{FEFF}').unwrap_or(content);
 
