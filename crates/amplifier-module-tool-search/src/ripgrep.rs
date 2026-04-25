@@ -6,7 +6,7 @@
 //! [{"file": "src/main.rs", "line": 42, "content": "    println!(\"hello\");"}]
 //! ```
 //!
-//! The public entry point [`grep`] tries `rg` first and falls back to the
+//! The public entry point `grep` tries `rg` first and falls back to the
 //! pure-Rust `grep_fallback` implementation on any error (e.g. `rg` not
 //! installed).
 
