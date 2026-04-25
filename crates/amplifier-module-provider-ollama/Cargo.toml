@@ -1,8 +1,17 @@
 [package]
 name = "amplifier-module-provider-ollama"
-version = "0.1.0"
-edition = "2021"
-description = "Ollama/ChatCompletions-compatible provider for the amplifier-rust workspace"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Ollama / OpenAI-compatible ChatCompletions provider for the Amplifier agent framework"
+readme = "README.md"
+keywords = ["amplifier", "ai", "ollama", "local", "llm"]
+categories = ["api-bindings", "asynchronous"]
+documentation = "https://docs.rs/amplifier-module-provider-ollama"
 
 [dependencies]
 amplifier-core = { workspace = true }
@@ -15,4 +24,4 @@ log = "0.4"
 
 [dev-dependencies]
 wiremock = "0.6"
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true }
