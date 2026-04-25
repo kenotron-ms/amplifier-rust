@@ -1,0 +1,15 @@
+[package]
+name = "amplifier-context-foundation"
+version = "0.1.0"
+edition = "2021"
+description = "Foundation context for amplifier-rust — ports Python amplifier-foundation context files for autonomous agent delegation"
+include = ["src/**", "context/**", "Cargo.toml"]
+
+[dependencies]
+amplifier-core = { workspace = true }
+amplifier-module-orchestrator-loop-streaming = { path = "../amplifier-module-orchestrator-loop-streaming" }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+serde_json = { workspace = true }

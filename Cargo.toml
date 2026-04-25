@@ -19,6 +19,7 @@ members = [
     "crates/amplifier-module-tool-delegate",
     "crates/amplifier-module-session-store",
     "crates/amplifier-module-hooks-routing",
+    "crates/amplifier-context-foundation",
 ]
 
 [workspace.package]
@@ -50,3 +51,4 @@ amplifier-module-agent-runtime = { path = "crates/amplifier-module-agent-runtime
 globset = "0.4"
 regex = "1"
 amplifier-module-hooks-routing = { path = "crates/amplifier-module-hooks-routing", version = "0.1.0" }
+amplifier-context-foundation = { path = "crates/amplifier-context-foundation", version = "0.1.0" }

@@ -26,6 +26,7 @@ amplifier-module-provider-openai = { path = "../../crates/amplifier-module-provi
 amplifier-module-tool-delegate = { path = "../../crates/amplifier-module-tool-delegate" }
 amplifier-module-session-store = { path = "../../crates/amplifier-module-session-store" }
 amplifier-module-hooks-routing = { path = "../../crates/amplifier-module-hooks-routing" }
+amplifier-context-foundation = { workspace = true }
 amplifier-module-agent-runtime = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 tokio = { workspace = true }

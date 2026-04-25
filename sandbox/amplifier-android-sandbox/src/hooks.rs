@@ -4,6 +4,7 @@
 //! `StatusContextHook` for local dev — it prints every lifecycle event to stderr and
 //! returns `HookResult::Continue` without altering orchestrator behaviour.
 
+use amplifier_context_foundation::FoundationContextHook;
 use amplifier_module_orchestrator_loop_streaming::{
     Hook, HookContext, HookEvent, HookRegistry, HookResult,
 };
@@ -47,10 +48,13 @@ impl Hook for LoggingHook {
 
 /// Build a [`HookRegistry`] pre-populated with the sandbox hooks.
 ///
-/// Currently registers [`LoggingHook`] which observes all five lifecycle
-/// events and emits debug output to stderr.
+/// Registers:
+/// - [`FoundationContextHook`]: injects delegation instructions and multi-agent
+///   patterns before every LLM call, teaching the model to delegate autonomously.
+/// - [`LoggingHook`]: logs every lifecycle event to stderr.
 pub fn build_registry() -> HookRegistry {
     let mut r = HookRegistry::new();
+    r.register(Box::new(FoundationContextHook::new()));
     r.register(Box::new(LoggingHook));
     r
 }
