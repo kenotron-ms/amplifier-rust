@@ -117,6 +117,7 @@ pub fn apply(_vault_path: &std::path::Path) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]
