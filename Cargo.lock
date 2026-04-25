@@ -12,6 +12,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "amplifier-agent-foundation"
+version = "0.1.0"
+dependencies = [
+ "amplifier-module-agent-runtime",
+]
+
+[[package]]
 name = "amplifier-android-sandbox"
 version = "0.1.0"
 dependencies = [
@@ -57,6 +64,17 @@ dependencies = [
  "tonic",
  "tonic-build",
  "uuid",
+]
+
+[[package]]
+name = "amplifier-module-agent-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
 ]
 
 [[package]]
@@ -150,6 +168,21 @@ name = "amplifier-module-tool-bash"
 version = "0.1.0"
 dependencies = [
  "amplifier-core",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "amplifier-module-tool-delegate"
+version = "0.1.0"
+dependencies = [
+ "amplifier-core",
+ "amplifier-module-agent-runtime",
+ "amplifier-module-tool-task",
+ "anyhow",
+ "async-trait",
+ "rand 0.8.6",
+ "serde",
  "serde_json",
  "tokio",
 ]

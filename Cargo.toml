@@ -15,6 +15,9 @@ members = [
     "crates/amplifier-module-tool-bash",
     "crates/amplifier-module-tool-search",
     "sandbox/amplifier-android-sandbox",
+    "crates/amplifier-module-agent-runtime",
+    "crates/amplifier-module-tool-delegate",
+    "amplifier-agent-foundation",
 ]
 
 [workspace.dependencies]
@@ -30,3 +33,6 @@ tiktoken-rs = "0.5"
 serde_yaml = "0.9"
 futures = "0.3"
 uuid = { version = "1", features = ["v4"] }
+rand = "0.8"
+amplifier-module-agent-runtime = { path = "crates/amplifier-module-agent-runtime" }
+amplifier-agent-foundation = { path = "amplifier-agent-foundation" }
