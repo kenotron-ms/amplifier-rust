@@ -24,6 +24,7 @@ amplifier-module-provider-ollama = { path = "../../crates/amplifier-module-provi
 amplifier-module-provider-gemini = { path = "../../crates/amplifier-module-provider-gemini" }
 amplifier-module-provider-openai = { path = "../../crates/amplifier-module-provider-openai" }
 amplifier-module-tool-delegate = { path = "../../crates/amplifier-module-tool-delegate" }
+amplifier-module-session-store = { path = "../../crates/amplifier-module-session-store" }
 amplifier-module-hooks-routing = { path = "../../crates/amplifier-module-hooks-routing" }
 amplifier-module-agent-runtime = { workspace = true }
 clap = { version = "4", features = ["derive"] }

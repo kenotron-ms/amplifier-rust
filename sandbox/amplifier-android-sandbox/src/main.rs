@@ -35,6 +35,7 @@ use amplifier_module_provider_openai::{OpenAIConfig, OpenAIProvider};
 use amplifier_module_tool_delegate::{DelegateConfig, DelegateTool};
 use amplifier_module_tool_skills::SkillEngine;
 use amplifier_module_tool_task::{SubagentRunner, TaskTool};
+use amplifier_module_session_store::{FileSessionStore, SessionStore};
 use amplifier_module_hooks_routing::{HookContext, HookEvent, HooksRouting, RoutingConfig};
 use amplifier_module_hooks_routing::HookResult;
 use std::collections::HashMap;
@@ -252,15 +253,24 @@ async fn main() -> Result<()> {
     );
 
     // Step 11: wire DelegateTool
+    // Session store — persists sub-agent transcripts to ~/.amplifier/sessions/
+    let session_store: Arc<dyn SessionStore> = Arc::new(
+        FileSessionStore::new().unwrap_or_else(|e| {
+            eprintln!("[sandbox] WARNING: session store unavailable: {e}");
+            FileSessionStore::new_with_root(args.vault.join(".sessions"))
+        }),
+    );
+
     // DelegateTool: provide a cloned snapshot of the current registry for reads.
     let registry_snapshot: Arc<AgentRegistry> = {
         let r = registry_rw.read().await;
         Arc::new(r.clone())
     };
-    let delegate_tool = DelegateTool::new(
+    let delegate_tool = DelegateTool::new_with_store(
         Arc::clone(&orch) as Arc<dyn SubagentRunner>,
         registry_snapshot,
         DelegateConfig::default(),
+        session_store,
     );
     tool_map.insert("delegate".to_string(), Box::new(delegate_tool));
 

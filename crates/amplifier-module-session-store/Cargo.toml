@@ -26,3 +26,8 @@ dirs = { workspace = true }
 [dev-dependencies]
 tempfile = "3"
 tokio = { workspace = true }
+chrono = { workspace = true }
+amplifier-module-orchestrator-loop-streaming = { path = "../amplifier-module-orchestrator-loop-streaming" }
+amplifier-module-context-simple = { path = "../amplifier-module-context-simple" }
+amplifier-module-tool-task = { path = "../amplifier-module-tool-task" }
+amplifier-core = { workspace = true }

@@ -24,6 +24,7 @@ dependencies = [
  "amplifier-module-provider-gemini",
  "amplifier-module-provider-ollama",
  "amplifier-module-provider-openai",
+ "amplifier-module-session-store",
  "amplifier-module-tool-bash",
  "amplifier-module-tool-delegate",
  "amplifier-module-tool-filesystem",
@@ -110,11 +111,14 @@ version = "0.1.0"
 dependencies = [
  "amplifier-core",
  "amplifier-module-context-simple",
+ "amplifier-module-session-store",
  "amplifier-module-tool-task",
  "anyhow",
  "async-trait",
+ "chrono",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
 ]
@@ -180,6 +184,10 @@ dependencies = [
 name = "amplifier-module-session-store"
 version = "0.1.0"
 dependencies = [
+ "amplifier-core",
+ "amplifier-module-context-simple",
+ "amplifier-module-orchestrator-loop-streaming",
+ "amplifier-module-tool-task",
  "anyhow",
  "async-trait",
  "chrono",
@@ -206,12 +214,15 @@ version = "0.1.0"
 dependencies = [
  "amplifier-core",
  "amplifier-module-agent-runtime",
+ "amplifier-module-session-store",
  "amplifier-module-tool-task",
  "anyhow",
  "async-trait",
+ "chrono",
  "rand 0.8.6",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 
