@@ -11,8 +11,10 @@ pub mod format;
 pub use file::FileSessionStore;
 pub use format::{IndexEntry, SessionEvent, SessionMetadata};
 
-use anyhow::Result;
 use async_trait::async_trait;
+
+/// Convenience alias so callers and implementors don't need to import `anyhow` directly.
+pub type Result<T> = anyhow::Result<T>;
 
 /// Trait for persisting and loading session data.
 #[async_trait]
@@ -24,7 +26,7 @@ pub trait SessionStore: Send + Sync {
     async fn append(&self, session_id: &str, event: SessionEvent) -> Result<()>;
 
     /// Mark a session as finished with a final status and turn count.
-    async fn finish(&self, session_id: &str, status: &str, turn_count: u32) -> Result<()>;
+    async fn finish(&self, session_id: &str, status: &str, turn_count: usize) -> Result<()>;
 
     /// Load all events recorded for a session.
     async fn load(&self, session_id: &str) -> Result<Vec<SessionEvent>>;
