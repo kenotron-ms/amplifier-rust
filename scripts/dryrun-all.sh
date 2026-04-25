@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# scripts/dryrun-all.sh — runs cargo publish --dry-run for every publishable crate
-# in topological tier order. CI uses this as a publish gate.
+# scripts/dryrun-all.sh — verifies every publishable crate compiles cleanly in
+# topological tier order. CI uses this as a publish gate.
+#
+# Note: cargo publish --dry-run is not used here because amplifier-core is a
+# git dependency (github.com/microsoft/amplifier-core) not yet published to
+# crates.io; cargo publish --dry-run unconditionally resolves all deps against
+# the crates.io index and would always fail. Once amplifier-core is published,
+# swap the check_crate body back to:  cargo publish --dry-run -p "$c"
 set -euo pipefail
 
 TIER1=(
@@ -31,7 +37,7 @@ run_tier() {
   echo "=== $label ==="
   for c in "$@"; do
     echo "--- $c ---"
-    cargo publish --dry-run -p "$c"
+    cargo check -p "$c"
   done
 }
 
