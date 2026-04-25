@@ -1,7 +1,17 @@
 [package]
 name = "amplifier-module-tool-bash"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Sandboxed bash command execution tool for the Amplifier agent framework"
+readme = "README.md"
+keywords = ["amplifier", "ai", "agent", "tool", "bash"]
+categories = ["command-line-utilities", "asynchronous"]
+documentation = "https://docs.rs/amplifier-module-tool-bash"
 
 [dependencies]
 amplifier-core = { workspace = true }
@@ -9,4 +19,4 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true }
