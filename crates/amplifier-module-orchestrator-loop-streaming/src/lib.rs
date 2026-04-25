@@ -362,10 +362,47 @@ pub fn response_to_message(content: &[ContentBlock]) -> Value {
 #[async_trait]
 impl SubagentRunner for LoopOrchestrator {
     async fn run(&self, req: SpawnRequest) -> anyhow::Result<String> {
-        let mut ctx = SimpleContext::new(req.context);
-        let hooks = HookRegistry::new();
-        self.execute(req.instruction, &mut ctx, &hooks, |_| {})
-            .await
+        if req.agent_system_prompt.is_some() || !req.tool_filter.is_empty() {
+            // Build a child orchestrator with overridden config
+            let child_config = LoopConfig {
+                max_steps: self.config.max_steps,
+                system_prompt: req
+                    .agent_system_prompt
+                    .unwrap_or_else(|| self.config.system_prompt.clone()),
+            };
+            let child = LoopOrchestrator::new(child_config);
+
+            // Share providers
+            let providers = self.snapshot_providers().await;
+            for (name, provider) in providers {
+                child.register_provider(name, provider).await;
+            }
+
+            // Share tools, filtered by tool_filter if non-empty
+            let tools = self.snapshot_tools().await;
+            let filtered: HashMap<String, Arc<dyn Tool>> = if req.tool_filter.is_empty() {
+                tools
+            } else {
+                tools
+                    .into_iter()
+                    .filter(|(k, _)| req.tool_filter.contains(k))
+                    .collect()
+            };
+            *child.tools.write().await = filtered;
+
+            // Execute with child orchestrator
+            let mut ctx = SimpleContext::new(req.context);
+            let hooks = HookRegistry::new();
+            child
+                .execute(req.instruction, &mut ctx, &hooks, |_| {})
+                .await
+        } else {
+            // Fall through to self.execute (no customisation needed)
+            let mut ctx = SimpleContext::new(req.context);
+            let hooks = HookRegistry::new();
+            self.execute(req.instruction, &mut ctx, &hooks, |_| {})
+                .await
+        }
     }
 }
 

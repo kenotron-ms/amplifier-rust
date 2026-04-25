@@ -73,6 +73,10 @@ pub struct SpawnRequest {
     pub context: Vec<Value>,
     /// Optional session ID to resume a previous sub-agent session.
     pub session_id: Option<String>,
+    /// Agent system prompt override; None = use parent orchestrator's.
+    pub agent_system_prompt: Option<String>,
+    /// Tool name allowlist for child session; empty = inherit all parent tools.
+    pub tool_filter: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +252,8 @@ impl Tool for TaskTool {
                 context_scope,
                 context: vec![],
                 session_id,
+                agent_system_prompt: None,
+                tool_filter: vec![],
             };
 
             match self.runner.run(req).await {
@@ -323,6 +329,8 @@ mod tests {
             context_scope: ContextScope::Conversation,
             context: vec![],
             session_id: None,
+            agent_system_prompt: None,
+            tool_filter: vec![],
         };
         assert_eq!(req.context_depth, ContextDepth::None);
     }

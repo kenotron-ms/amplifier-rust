@@ -201,6 +201,8 @@ impl SkillEngine {
                     context_scope: ContextScope::Conversation,
                     context: vec![],
                     session_id: None,
+                    agent_system_prompt: None,
+                    tool_filter: vec![],
                 };
 
                 let result = runner.run(req).await?;
