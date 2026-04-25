@@ -14,6 +14,9 @@
 //! 9. Build the provider from `--provider` (reading the appropriate API-key env var),
 //!    register it and all tools with the orchestrator, then either execute the
 //!    single `--prompt` or run the interactive REPL.
+//! 10. Build [`AgentRegistry`]: register foundation agents, then load from
+//!     `<vault>/.agents/`, then from `$HOME/.amplifier/agents/` (highest priority).
+//! 11. Wire [`DelegateTool`] into the tool map backed by the registry and orchestrator.
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -28,6 +31,9 @@ use amplifier_module_provider_anthropic::{AnthropicConfig, AnthropicProvider};
 use amplifier_module_provider_gemini::{GeminiConfig, GeminiProvider};
 use amplifier_module_provider_ollama::{OllamaConfig, OllamaProvider};
 use amplifier_module_provider_openai::{OpenAIConfig, OpenAIProvider};
+use amplifier_agent_foundation::foundation_agents;
+use amplifier_module_agent_runtime::AgentRegistry;
+use amplifier_module_tool_delegate::{DelegateConfig, DelegateTool};
 use amplifier_module_tool_skills::SkillEngine;
 use amplifier_module_tool_task::{SubagentRunner, TaskTool};
 
@@ -191,6 +197,34 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(&skills_dir)?;
     let skills_tool = SkillEngine::new(&args.vault);
     tool_map.insert("skills".to_string(), Box::new(skills_tool));
+
+    // Step 10: build AgentRegistry
+    let mut agent_registry = AgentRegistry::new();
+    for agent in foundation_agents() {
+        agent_registry.register(agent);
+    }
+
+    let vault_agents_dir = args.vault.join(".agents");
+    std::fs::create_dir_all(&vault_agents_dir).with_context(|| {
+        format!("failed to create vault agents directory: {}", vault_agents_dir.display())
+    })?;
+    let vault_count = agent_registry.load_from_dir(&vault_agents_dir).unwrap_or(0);
+
+    let global_count = if let Ok(home) = std::env::var("HOME").map(std::path::PathBuf::from) {
+        let global_agents_dir = home.join(".amplifier").join("agents");
+        agent_registry.load_from_dir(&global_agents_dir).unwrap_or(0)
+    } else { 0 };
+
+    eprintln!("[sandbox] agent registry: 6 foundation + {vault_count} vault + {global_count} global");
+    let registry = std::sync::Arc::new(agent_registry);
+
+    // Step 11: wire DelegateTool
+    let delegate_tool = DelegateTool::new(
+        Arc::clone(&orch) as Arc<dyn SubagentRunner>,
+        Arc::clone(&registry),
+        DelegateConfig::default(),
+    );
+    tool_map.insert("delegate".to_string(), Box::new(delegate_tool));
 
     // Step 9: build the provider, register it, and register all tools
     let provider: Box<dyn Provider> = build_provider(&args.provider, args.model.as_deref())?;

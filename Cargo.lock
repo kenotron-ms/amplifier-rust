@@ -22,7 +22,9 @@ dependencies = [
 name = "amplifier-android-sandbox"
 version = "0.1.0"
 dependencies = [
+ "amplifier-agent-foundation",
  "amplifier-core",
+ "amplifier-module-agent-runtime",
  "amplifier-module-context-simple",
  "amplifier-module-orchestrator-loop-streaming",
  "amplifier-module-provider-anthropic",
@@ -30,6 +32,7 @@ dependencies = [
  "amplifier-module-provider-ollama",
  "amplifier-module-provider-openai",
  "amplifier-module-tool-bash",
+ "amplifier-module-tool-delegate",
  "amplifier-module-tool-filesystem",
  "amplifier-module-tool-search",
  "amplifier-module-tool-skills",

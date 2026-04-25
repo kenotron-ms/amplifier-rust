@@ -23,6 +23,9 @@ amplifier-module-provider-anthropic = { path = "../../crates/amplifier-module-pr
 amplifier-module-provider-ollama = { path = "../../crates/amplifier-module-provider-ollama" }
 amplifier-module-provider-gemini = { path = "../../crates/amplifier-module-provider-gemini" }
 amplifier-module-provider-openai = { path = "../../crates/amplifier-module-provider-openai" }
+amplifier-module-tool-delegate = { path = "../../crates/amplifier-module-tool-delegate" }
+amplifier-module-agent-runtime = { workspace = true }
+amplifier-agent-foundation = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 tokio = { workspace = true }
 anyhow = { workspace = true }

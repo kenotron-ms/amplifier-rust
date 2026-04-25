@@ -87,6 +87,118 @@ pub fn generate_sub_session_id(parent_id: &str, agent_name: &str) -> String {
     format!("{}-{}_{}", parent_id, hex, slug)
 }
 
+
+// ---------------------------------------------------------------------------
+// Tool trait implementation
+// ---------------------------------------------------------------------------
+
+use amplifier_core::errors::ToolError;
+use amplifier_core::messages::ToolSpec;
+use amplifier_core::models::ToolResult;
+use amplifier_core::traits::Tool;
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+use serde_json::Value;
+
+impl Tool for DelegateTool {
+    fn name(&self) -> &str {
+        "delegate"
+    }
+
+    fn description(&self) -> &str {
+        "Spawn a named sub-agent to handle a task. Supports self-delegation for recursion,          namespace:path resolution, and agent registry lookup."
+    }
+
+    fn get_spec(&self) -> ToolSpec {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "agent".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Agent name to delegate to. Use 'self' for recursion,                                'namespace:path' for bundle agents, or a bare name for registry lookup."
+            }),
+        );
+        properties.insert(
+            "instruction".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "The instruction to give the sub-agent."
+            }),
+        );
+        properties.insert(
+            "context_depth".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "How much context to pass: none | recent | all",
+                "enum": ["none", "recent", "all"]
+            }),
+        );
+
+        ToolSpec {
+            name: "delegate".to_string(),
+            description: Some("Spawn a named sub-agent to handle a task.".to_string()),
+            parameters: {
+                let mut params = HashMap::new();
+                params.insert("type".to_string(), serde_json::json!("object"));
+                params.insert("properties".to_string(), serde_json::json!(properties));
+                params.insert("required".to_string(), serde_json::json!(["agent", "instruction"]));
+                params
+            },
+            extensions: HashMap::new(),
+        }
+    }
+
+    fn execute(
+        &self,
+        input: Value,
+    ) -> Pin<Box<dyn Future<Output = Result<ToolResult, ToolError>> + Send + '_>> {
+        let runner = Arc::clone(&self.runner);
+        let registry = Arc::clone(&self.registry);
+        Box::pin(async move {
+            let agent = input["agent"]
+                .as_str()
+                .ok_or_else(|| ToolError::Other { message: "agent is required".into() })?
+                .to_string();
+            let instruction = input["instruction"]
+                .as_str()
+                .ok_or_else(|| ToolError::Other { message: "instruction is required".into() })?
+                .to_string();
+
+            // Resolve agent system prompt from registry if available.
+            let agent_system_prompt = registry
+                .get(&agent)
+                .map(|c| c.instruction.clone());
+
+            let req = SpawnRequest {
+                instruction,
+                context_depth: amplifier_module_tool_task::ContextDepth::None,
+                context_scope: amplifier_module_tool_task::ContextScope::Conversation,
+                context: vec![],
+                session_id: None,
+                agent_system_prompt,
+                tool_filter: vec![],
+            };
+
+            let result = runner
+                .run(req)
+                .await
+                .map_err(|e| ToolError::ExecutionFailed {
+                    message: e.to_string(),
+                    stdout: None,
+                    stderr: None,
+                    exit_code: None,
+                })?;
+
+            Ok(ToolResult {
+                success: true,
+                output: Some(serde_json::Value::String(result)),
+                error: None,
+            })
+        })
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
