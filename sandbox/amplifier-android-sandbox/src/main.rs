@@ -35,6 +35,10 @@ use amplifier_module_provider_openai::{OpenAIConfig, OpenAIProvider};
 use amplifier_module_tool_delegate::{DelegateConfig, DelegateTool};
 use amplifier_module_tool_skills::SkillEngine;
 use amplifier_module_tool_task::{SubagentRunner, TaskTool};
+use amplifier_module_hooks_routing::{HookContext, HookEvent, HooksRouting, RoutingConfig};
+use amplifier_module_hooks_routing::HookResult;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 
 mod hooks;
 mod sandbox;
@@ -219,6 +223,10 @@ async fn main() -> Result<()> {
         }
     }
 
+    // HooksRouting needs Arc<RwLock<AgentRegistry>> for mutation at SessionStart.
+    // DelegateTool reads the same registry via a snapshot reference.
+    let registry_rw: Arc<RwLock<AgentRegistry>> = Arc::new(RwLock::new(agent_registry));
+
     let vault_agents_dir = args.vault.join(".agents");
     std::fs::create_dir_all(&vault_agents_dir).with_context(|| {
         format!(
@@ -226,13 +234,15 @@ async fn main() -> Result<()> {
             vault_agents_dir.display()
         )
     })?;
-    let vault_count = agent_registry.load_from_dir(&vault_agents_dir).unwrap_or(0);
+    let vault_count = {
+        let mut r = registry_rw.write().await;
+        r.load_from_dir(&vault_agents_dir).unwrap_or(0)
+    };
 
     let global_count = if let Ok(home) = std::env::var("HOME").map(std::path::PathBuf::from) {
         let global_agents_dir = home.join(".amplifier").join("agents");
-        agent_registry
-            .load_from_dir(&global_agents_dir)
-            .unwrap_or(0)
+        let mut r = registry_rw.write().await;
+        r.load_from_dir(&global_agents_dir).unwrap_or(0)
     } else {
         0
     };
@@ -240,12 +250,16 @@ async fn main() -> Result<()> {
     eprintln!(
         "[sandbox] agent registry: {foundation_count} foundation + {vault_count} vault + {global_count} global"
     );
-    let registry = std::sync::Arc::new(agent_registry);
 
     // Step 11: wire DelegateTool
+    // DelegateTool: provide a cloned snapshot of the current registry for reads.
+    let registry_snapshot: Arc<AgentRegistry> = {
+        let r = registry_rw.read().await;
+        Arc::new(r.clone())
+    };
     let delegate_tool = DelegateTool::new(
         Arc::clone(&orch) as Arc<dyn SubagentRunner>,
-        Arc::clone(&registry),
+        registry_snapshot,
         DelegateConfig::default(),
     );
     tool_map.insert("delegate".to_string(), Box::new(delegate_tool));
@@ -262,10 +276,51 @@ async fn main() -> Result<()> {
         orch.register_tool(arc_tool).await;
     }
 
+    // ---------------------------------------------------------------------------
+    // Routing — resolve model roles for all agents at session start
+    // ---------------------------------------------------------------------------
+
+    // Build a provider map snapshot for the routing hook.
+    let provider_map_snapshot: HashMap<String, Arc<dyn amplifier_core::traits::Provider>> = {
+        let snapshot = orch.providers.read().await;
+        snapshot.clone()
+    };
+
+    let routing = HooksRouting::new(RoutingConfig::default(), Arc::clone(&registry_rw))
+        .map_err(|e| anyhow::anyhow!("failed to load routing matrix: {e}"))?;
+
+    routing.set_providers(provider_map_snapshot).await;
+
+    // Fire SessionStart hook — resolves model_role for each registered agent.
+    {
+        let routing_hooks = {
+            let mut r = amplifier_module_hooks_routing::HookRegistry::new();
+            routing.register_on(&mut r);
+            r
+        };
+        routing_hooks.emit(HookEvent::SessionStart, &HookContext).await;
+    }
+
+    // Build a shared routing hooks registry for ProviderRequest injection.
+    let routing_registry = {
+        let mut r = amplifier_module_hooks_routing::HookRegistry::new();
+        routing.register_on(&mut r);
+        r
+    };
+
     // Build the in-memory context
     let mut context = SimpleContext::new(vec![]);
 
     if let Some(prompt) = args.prompt {
+        // Inject routing catalog into ephemeral context before each turn.
+        let routing_results = routing_registry
+            .emit(HookEvent::ProviderRequest, &HookContext)
+            .await;
+        for result in routing_results {
+            if let HookResult::InjectContext(text) = result {
+                context.push_ephemeral(serde_json::json!({"role": "system", "content": text}));
+            }
+        }
         // Single-turn mode: execute once and print the response
         let response = orch
             .execute(prompt, &mut context, &hook_registry, |_token| {})
@@ -290,6 +345,15 @@ async fn main() -> Result<()> {
                     let trimmed = line.trim().to_string();
                     if trimmed.is_empty() {
                         continue;
+                    }
+                    // Inject routing catalog into ephemeral context before each turn.
+                    let routing_results = routing_registry
+                        .emit(HookEvent::ProviderRequest, &HookContext)
+                        .await;
+                    for result in routing_results {
+                        if let HookResult::InjectContext(text) = result {
+                            context.push_ephemeral(serde_json::json!({"role": "system", "content": text}));
+                        }
                     }
                     match orch
                         .execute(trimmed, &mut context, &hook_registry, |_token| {})

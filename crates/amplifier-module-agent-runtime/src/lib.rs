@@ -67,6 +67,7 @@ pub struct AgentConfig {
 // ---------------------------------------------------------------------------
 
 /// In-memory registry that maps agent names to their [`AgentConfig`].
+#[derive(Clone)]
 pub struct AgentRegistry {
     agents: HashMap<String, AgentConfig>,
 }

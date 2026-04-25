@@ -18,6 +18,7 @@ dependencies = [
  "amplifier-core",
  "amplifier-module-agent-runtime",
  "amplifier-module-context-simple",
+ "amplifier-module-hooks-routing",
  "amplifier-module-orchestrator-loop-streaming",
  "amplifier-module-provider-anthropic",
  "amplifier-module-provider-gemini",
