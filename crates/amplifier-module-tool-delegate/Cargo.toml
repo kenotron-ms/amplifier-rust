@@ -17,12 +17,15 @@ documentation = "https://docs.rs/amplifier-module-tool-delegate"
 amplifier-core = { workspace = true }
 amplifier-module-tool-task = { path = "../amplifier-module-tool-task", version = "0.1.0" }
 amplifier-module-agent-runtime = { workspace = true }
+amplifier-module-session-store = { path = "../amplifier-module-session-store" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 rand = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 async-trait = { workspace = true }
+tempfile = "3"
