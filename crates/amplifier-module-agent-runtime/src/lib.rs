@@ -5,6 +5,39 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
+// ModelRole
+// ---------------------------------------------------------------------------
+
+/// A single role name or an ordered fallback chain of role names.
+///
+/// `model_role:` in agent frontmatter may be a string or a list of strings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum ModelRole {
+    /// A single role name (e.g. `"fast"`).
+    Single(String),
+    /// Ordered fallback chain tried left-to-right (e.g. `["reasoning", "general"]`).
+    Chain(Vec<String>),
+}
+
+// ---------------------------------------------------------------------------
+// ResolvedProvider
+// ---------------------------------------------------------------------------
+
+/// A `(provider, model)` pair plus opaque pass-through config, produced by
+/// the routing resolver and stored on `AgentConfig::provider_preferences`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ResolvedProvider {
+    /// Provider short-name (e.g. `"anthropic"`).
+    pub provider: String,
+    /// Concrete model name (e.g. `"claude-haiku-4"`).
+    pub model: String,
+    /// Opaque per-provider config (e.g. `{ reasoning_effort: "high" }`).
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
+// ---------------------------------------------------------------------------
 // AgentConfig
 // ---------------------------------------------------------------------------
 
@@ -19,6 +52,14 @@ pub struct AgentConfig {
     pub tools: Vec<String>,
     /// System prompt for this agent.
     pub instruction: String,
+    /// Optional declared model role(s) — single name or fallback chain.
+    /// Resolved by the routing hook at session start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_role: Option<ModelRole>,
+    /// Resolved `(provider, model, config)` set by the routing hook.
+    /// `None` until SessionStart fires and resolution succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_preferences: Option<Vec<ResolvedProvider>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +107,15 @@ impl AgentRegistry {
         let mut names: Vec<&str> = self.agents.keys().map(|s| s.as_str()).collect();
         names.sort_unstable();
         names
+    }
+
+    /// Set the resolved provider preferences on an existing agent.
+    ///
+    /// No-op if no agent with `name` is registered.
+    pub fn set_provider_preferences(&mut self, name: &str, prefs: Vec<ResolvedProvider>) {
+        if let Some(cfg) = self.agents.get_mut(name) {
+            cfg.provider_preferences = Some(prefs);
+        }
     }
 
     /// Load all agent bundle files from `dir` into the registry.
@@ -180,11 +230,17 @@ pub fn parse_agent_content(content: &str) -> Option<AgentConfig> {
     let body_start = delimiters[1] + 1;
     let instruction = lines[body_start..].join("\n").trim().to_string();
 
+    let model_role = yaml_value
+        .get("model_role")
+        .and_then(|v| serde_yaml::from_value::<ModelRole>(v.clone()).ok());
+
     Some(AgentConfig {
         name,
         description,
         tools,
         instruction,
+        model_role,
+        provider_preferences: None,
     })
 }
 
@@ -204,6 +260,8 @@ mod tests {
             description: "A test agent".to_string(),
             tools: vec!["bash".to_string()],
             instruction: "You are a test agent.".to_string(),
+            model_role: None,
+            provider_preferences: None,
         });
         let found = registry.get("my-agent").expect("should find agent");
         assert_eq!(found.name, "my-agent");
@@ -219,9 +277,74 @@ mod tests {
                 description: String::new(),
                 tools: vec![],
                 instruction: String::new(),
+                model_role: None,
+                provider_preferences: None,
             });
         }
         let names: Vec<&str> = registry.list().iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names, vec!["alpha", "mango", "zebra"]);
+    }
+
+    #[test]
+    fn agent_config_supports_model_role_single_and_chain() {
+        let single = AgentConfig {
+            name: "explorer".to_string(),
+            description: String::new(),
+            tools: vec![],
+            instruction: String::new(),
+            model_role: Some(ModelRole::Single("fast".to_string())),
+            provider_preferences: None,
+        };
+        assert!(matches!(single.model_role, Some(ModelRole::Single(ref s)) if s == "fast"));
+
+        let chain = AgentConfig {
+            name: "zen-architect".to_string(),
+            description: String::new(),
+            tools: vec![],
+            instruction: String::new(),
+            model_role: Some(ModelRole::Chain(vec![
+                "reasoning".to_string(),
+                "general".to_string(),
+            ])),
+            provider_preferences: None,
+        };
+        assert!(matches!(&chain.model_role, Some(ModelRole::Chain(v)) if v.len() == 2));
+    }
+
+    #[test]
+    fn parse_agent_content_reads_model_role_string() {
+        let md = "---\nmeta:\n  name: explorer\n  description: x\nmodel_role: fast\n---\nbody";
+        let cfg = parse_agent_content(md).expect("must parse");
+        assert!(matches!(cfg.model_role, Some(ModelRole::Single(ref s)) if s == "fast"));
+    }
+
+    #[test]
+    fn parse_agent_content_reads_model_role_list() {
+        let md = "---\nmeta:\n  name: zen\n  description: x\nmodel_role:\n  - reasoning\n  - general\n---\nbody";
+        let cfg = parse_agent_content(md).expect("must parse");
+        assert!(matches!(&cfg.model_role, Some(ModelRole::Chain(v)) if v == &vec!["reasoning".to_string(), "general".to_string()]));
+    }
+
+    #[test]
+    fn registry_set_provider_preferences_updates_existing_agent() {
+        let mut registry = AgentRegistry::new();
+        registry.register(AgentConfig {
+            name: "a".to_string(),
+            description: String::new(),
+            tools: vec![],
+            instruction: String::new(),
+            model_role: Some(ModelRole::Single("fast".to_string())),
+            provider_preferences: None,
+        });
+        let prefs = vec![ResolvedProvider {
+            provider: "anthropic".to_string(),
+            model: "claude-haiku-3".to_string(),
+            config: serde_json::Value::Null,
+        }];
+        registry.set_provider_preferences("a", prefs.clone());
+        assert_eq!(
+            registry.get("a").unwrap().provider_preferences.as_ref().unwrap()[0].model,
+            "claude-haiku-3"
+        );
     }
 }
