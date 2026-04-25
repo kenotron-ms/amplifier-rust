@@ -70,7 +70,7 @@ mod tests {
             .emit(HookEvent::SessionStart, serde_json::json!({}))
             .await;
         assert!(
-            results.len() >= 1,
+            !results.is_empty(),
             "registry should contain at least one hook"
         );
     }

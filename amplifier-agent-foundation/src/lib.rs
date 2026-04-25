@@ -36,7 +36,6 @@ pub fn foundation_agents() -> Vec<AgentConfig> {
                           before drawing conclusions."
                 .to_string(),
         },
-
         // 2. zen-architect
         AgentConfig {
             name: "zen-architect".to_string(),
@@ -52,7 +51,6 @@ pub fn foundation_agents() -> Vec<AgentConfig> {
                           simplest solution that could work?"
                 .to_string(),
         },
-
         // 3. bug-hunter
         AgentConfig {
             name: "bug-hunter".to_string(),
@@ -71,7 +69,6 @@ pub fn foundation_agents() -> Vec<AgentConfig> {
                           actual problem."
                 .to_string(),
         },
-
         // 4. git-ops
         AgentConfig {
             name: "git-ops".to_string(),
@@ -86,7 +83,6 @@ pub fn foundation_agents() -> Vec<AgentConfig> {
                           without explicit confirmation)."
                 .to_string(),
         },
-
         // 5. modular-builder
         AgentConfig {
             name: "modular-builder".to_string(),
@@ -106,7 +102,6 @@ pub fn foundation_agents() -> Vec<AgentConfig> {
                           minimal implementations."
                 .to_string(),
         },
-
         // 6. security-guardian
         AgentConfig {
             name: "security-guardian".to_string(),
@@ -146,8 +141,14 @@ mod tests {
     fn all_foundation_agents_have_non_empty_names() {
         for agent in foundation_agents() {
             assert!(!agent.name.is_empty(), "agent name must not be empty");
-            assert!(!agent.description.is_empty(), "agent description must not be empty");
-            assert!(!agent.instruction.is_empty(), "agent instruction must not be empty");
+            assert!(
+                !agent.description.is_empty(),
+                "agent description must not be empty"
+            );
+            assert!(
+                !agent.instruction.is_empty(),
+                "agent instruction must not be empty"
+            );
         }
     }
 

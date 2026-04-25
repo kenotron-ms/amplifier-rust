@@ -87,7 +87,6 @@ pub fn generate_sub_session_id(parent_id: &str, agent_name: &str) -> String {
     format!("{}-{}_{}", parent_id, hex, slug)
 }
 
-
 // ---------------------------------------------------------------------------
 // Tool trait implementation
 // ---------------------------------------------------------------------------
@@ -96,10 +95,10 @@ use amplifier_core::errors::ToolError;
 use amplifier_core::messages::ToolSpec;
 use amplifier_core::models::ToolResult;
 use amplifier_core::traits::Tool;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
-use serde_json::Value;
 
 impl Tool for DelegateTool {
     fn name(&self) -> &str {
@@ -142,7 +141,10 @@ impl Tool for DelegateTool {
                 let mut params = HashMap::new();
                 params.insert("type".to_string(), serde_json::json!("object"));
                 params.insert("properties".to_string(), serde_json::json!(properties));
-                params.insert("required".to_string(), serde_json::json!(["agent", "instruction"]));
+                params.insert(
+                    "required".to_string(),
+                    serde_json::json!(["agent", "instruction"]),
+                );
                 params
             },
             extensions: HashMap::new(),
@@ -158,17 +160,19 @@ impl Tool for DelegateTool {
         Box::pin(async move {
             let agent = input["agent"]
                 .as_str()
-                .ok_or_else(|| ToolError::Other { message: "agent is required".into() })?
+                .ok_or_else(|| ToolError::Other {
+                    message: "agent is required".into(),
+                })?
                 .to_string();
             let instruction = input["instruction"]
                 .as_str()
-                .ok_or_else(|| ToolError::Other { message: "instruction is required".into() })?
+                .ok_or_else(|| ToolError::Other {
+                    message: "instruction is required".into(),
+                })?
                 .to_string();
 
             // Resolve agent system prompt from registry if available.
-            let agent_system_prompt = registry
-                .get(&agent)
-                .map(|c| c.instruction.clone());
+            let agent_system_prompt = registry.get(&agent).map(|c| c.instruction.clone());
 
             let req = SpawnRequest {
                 instruction,
@@ -249,8 +253,14 @@ mod tests {
     #[test]
     fn generate_sub_session_id_format() {
         let id = generate_sub_session_id("parent", "explorer");
-        assert!(id.starts_with("parent-"), "expected 'parent-' prefix, got: {id}");
-        assert!(id.ends_with("_explorer"), "expected '_explorer' suffix, got: {id}");
+        assert!(
+            id.starts_with("parent-"),
+            "expected 'parent-' prefix, got: {id}"
+        );
+        assert!(
+            id.ends_with("_explorer"),
+            "expected '_explorer' suffix, got: {id}"
+        );
         // Extract the hex segment between prefix and suffix
         let without_prefix = id.strip_prefix("parent-").unwrap();
         let without_suffix = without_prefix.strip_suffix("_explorer").unwrap();

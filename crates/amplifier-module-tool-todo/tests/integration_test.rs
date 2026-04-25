@@ -34,8 +34,8 @@ async fn create_replaces_all_todos() {
     assert_eq!(todos.len(), 2);
 
     // IDs should be non-empty strings
-    assert!(todos[0]["id"].as_str().unwrap().len() > 0);
-    assert!(todos[1]["id"].as_str().unwrap().len() > 0);
+    assert!(!todos[0]["id"].as_str().unwrap().is_empty());
+    assert!(!todos[1]["id"].as_str().unwrap().is_empty());
 
     // Content and status preserved
     assert_eq!(todos[0]["content"], "Task 1");

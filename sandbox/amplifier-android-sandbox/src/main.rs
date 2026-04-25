@@ -24,15 +24,15 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use amplifier_agent_foundation::foundation_agents;
 use amplifier_core::traits::Provider;
+use amplifier_module_agent_runtime::AgentRegistry;
 use amplifier_module_context_simple::SimpleContext;
 use amplifier_module_orchestrator_loop_streaming::{LoopConfig, LoopOrchestrator};
 use amplifier_module_provider_anthropic::{AnthropicConfig, AnthropicProvider};
 use amplifier_module_provider_gemini::{GeminiConfig, GeminiProvider};
 use amplifier_module_provider_ollama::{OllamaConfig, OllamaProvider};
 use amplifier_module_provider_openai::{OpenAIConfig, OpenAIProvider};
-use amplifier_agent_foundation::foundation_agents;
-use amplifier_module_agent_runtime::AgentRegistry;
 use amplifier_module_tool_delegate::{DelegateConfig, DelegateTool};
 use amplifier_module_tool_skills::SkillEngine;
 use amplifier_module_tool_task::{SubagentRunner, TaskTool};
@@ -206,16 +206,25 @@ async fn main() -> Result<()> {
 
     let vault_agents_dir = args.vault.join(".agents");
     std::fs::create_dir_all(&vault_agents_dir).with_context(|| {
-        format!("failed to create vault agents directory: {}", vault_agents_dir.display())
+        format!(
+            "failed to create vault agents directory: {}",
+            vault_agents_dir.display()
+        )
     })?;
     let vault_count = agent_registry.load_from_dir(&vault_agents_dir).unwrap_or(0);
 
     let global_count = if let Ok(home) = std::env::var("HOME").map(std::path::PathBuf::from) {
         let global_agents_dir = home.join(".amplifier").join("agents");
-        agent_registry.load_from_dir(&global_agents_dir).unwrap_or(0)
-    } else { 0 };
+        agent_registry
+            .load_from_dir(&global_agents_dir)
+            .unwrap_or(0)
+    } else {
+        0
+    };
 
-    eprintln!("[sandbox] agent registry: 6 foundation + {vault_count} vault + {global_count} global");
+    eprintln!(
+        "[sandbox] agent registry: 6 foundation + {vault_count} vault + {global_count} global"
+    );
     let registry = std::sync::Arc::new(agent_registry);
 
     // Step 11: wire DelegateTool
