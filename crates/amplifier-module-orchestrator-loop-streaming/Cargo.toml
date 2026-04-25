@@ -1,12 +1,22 @@
 [package]
 name = "amplifier-module-orchestrator-loop-streaming"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Streaming agent-loop orchestrator with tool-call interleaving for the Amplifier agent framework"
+readme = "README.md"
+keywords = ["amplifier", "ai", "agent", "orchestrator", "streaming"]
+categories = ["asynchronous"]
+documentation = "https://docs.rs/amplifier-module-orchestrator-loop-streaming"
 
 [dependencies]
 amplifier-core = { workspace = true }
-amplifier-module-context-simple = { path = "../amplifier-module-context-simple" }
-amplifier-module-tool-task = { path = "../amplifier-module-tool-task" }
+amplifier-module-context-simple = { path = "../amplifier-module-context-simple", version = "0.1.0" }
+amplifier-module-tool-task = { path = "../amplifier-module-tool-task", version = "0.1.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
