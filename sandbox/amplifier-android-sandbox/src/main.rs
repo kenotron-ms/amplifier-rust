@@ -174,7 +174,7 @@ async fn main() -> Result<()> {
 
     // Step 6: create the orchestrator
     let orch = Arc::new(LoopOrchestrator::new(LoopConfig {
-        max_steps: args.max_steps,
+        max_steps: Some(args.max_steps),
         ..LoopConfig::default()
     }));
 

@@ -23,21 +23,15 @@ use amplifier_module_tool_task::{SpawnRequest, SubagentRunner};
 // ---------------------------------------------------------------------------
 
 /// Configuration for the agent loop.
+#[derive(Default)]
 pub struct LoopConfig {
     /// Maximum number of provider roundtrips before aborting.
-    pub max_steps: usize,
+    /// `None` = unlimited (Python-default behaviour); `Some(n)` = safety cap.
+    pub max_steps: Option<usize>,
     /// Optional system prompt prepended to every request.
     pub system_prompt: String,
 }
 
-impl Default for LoopConfig {
-    fn default() -> Self {
-        Self {
-            max_steps: 10,
-            system_prompt: String::new(),
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // LoopOrchestrator
@@ -90,7 +84,8 @@ impl LoopOrchestrator {
     /// * `on_token` — Callback invoked with text segments as they become available.
     ///
     /// # Returns
-    /// The final response text, or an error if the loop fails or exceeds `max_steps`.
+    /// The final response text, or an error if the loop fails.
+    /// Returns `Err("max_steps exceeded")` only when `max_steps` is `Some(n)`.
     pub async fn execute(
         &self,
         prompt: String,
@@ -124,7 +119,15 @@ impl LoopOrchestrator {
         let tool_specs: Vec<ToolSpec> = tools.values().map(|t| t.get_spec()).collect();
 
         // 6. Agent loop
-        for step in 0..self.config.max_steps {
+        let mut step: usize = 0;
+        loop {
+            // Step-limit guard (None = unlimited, matching Python orchestrator behaviour)
+            if let Some(limit) = self.config.max_steps {
+                if step >= limit {
+                    return Err(anyhow::anyhow!("max_steps exceeded"));
+                }
+            }
+
             // a. Emit ProviderRequest hook; collect ephemeral injections and system addenda
             let hook_results = hooks
                 .emit(HookEvent::ProviderRequest, json!({"step": step}))
@@ -318,9 +321,9 @@ impl LoopOrchestrator {
                     return Err(anyhow::anyhow!("unexpected stop_reason: {other}"));
                 }
             }
-        }
 
-        Err(anyhow::anyhow!("max_steps exceeded"))
+            step += 1;
+        }
     }
 }
 
@@ -446,15 +449,15 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Test 1: loop_config_default_max_steps_is_10
+    // Test 1: loop_config_default_max_steps_is_none
     // -----------------------------------------------------------------------
 
     #[test]
-    fn loop_config_default_max_steps_is_10() {
+    fn loop_config_default_max_steps_is_none() {
         let config = LoopConfig::default();
         assert_eq!(
-            config.max_steps, 10,
-            "LoopConfig::default() should have max_steps = 10"
+            config.max_steps, None,
+            "LoopConfig::default() should have max_steps = None (unlimited)"
         );
         assert!(
             config.system_prompt.is_empty(),

@@ -420,7 +420,7 @@ async fn execute_adds_user_message_to_context() {
 #[tokio::test]
 async fn execute_enforces_max_steps() {
     let orchestrator = LoopOrchestrator::new(LoopConfig {
-        max_steps: 3,
+        max_steps: Some(3),
         system_prompt: String::new(),
     });
 
