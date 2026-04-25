@@ -1,7 +1,17 @@
 [package]
 name = "amplifier-module-tool-task"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Task primitive (subagent invocation) for the Amplifier agent framework"
+readme = "README.md"
+keywords = ["amplifier", "ai", "agent", "tool", "subagent"]
+categories = ["asynchronous"]
+documentation = "https://docs.rs/amplifier-module-tool-task"
 
 [dependencies]
 amplifier-core = { workspace = true }
