@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 use tokio::sync::RwLock;
 
 use amplifier_module_context_simple::SimpleContext;
+use amplifier_module_session_store::{SessionEvent, SessionStore};
 use amplifier_module_tool_task::{SpawnRequest, SubagentRunner};
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,11 @@ pub struct LoopOrchestrator {
     pub providers: RwLock<HashMap<String, Arc<dyn Provider>>>,
     /// Registered tools keyed by name.
     pub tools: RwLock<HashMap<String, Arc<dyn Tool>>>,
+    // Session persistence (optional)
+    session_store: RwLock<Option<Arc<dyn SessionStore>>>,
+    session_id: RwLock<Option<String>>,
+    agent_name: RwLock<Option<String>>,
+    parent_id: RwLock<Option<String>>,
 }
 
 impl LoopOrchestrator {
@@ -54,7 +60,102 @@ impl LoopOrchestrator {
             config,
             providers: RwLock::new(HashMap::new()),
             tools: RwLock::new(HashMap::new()),
+            session_store: RwLock::new(None),
+            session_id: RwLock::new(None),
+            agent_name: RwLock::new(None),
+            parent_id: RwLock::new(None),
         }
+    }
+
+    /// Attach a session store. After this call, `execute()` will persist events.
+    pub fn attach_store(
+        &self,
+        store: Arc<dyn SessionStore>,
+        session_id: String,
+        agent_name: String,
+        parent_id: Option<String>,
+    ) {
+        *self
+            .session_store
+            .try_write()
+            .expect("attach_store contention") = Some(store);
+        *self
+            .session_id
+            .try_write()
+            .expect("attach_store contention") = Some(session_id);
+        *self
+            .agent_name
+            .try_write()
+            .expect("attach_store contention") = Some(agent_name);
+        *self
+            .parent_id
+            .try_write()
+            .expect("attach_store contention") = parent_id;
+    }
+
+    /// Persist a single event to the attached store. Errors are silently ignored
+    /// so a storage failure doesn't abort an agent turn.
+    async fn persist(&self, event: SessionEvent) {
+        let store_opt = { self.session_store.read().await.clone() };
+        let sid_opt = { self.session_id.read().await.clone() };
+        if let (Some(store), Some(sid)) = (store_opt, sid_opt) {
+            let _ = store.append(&sid, event).await;
+        }
+    }
+
+    /// Finalize the session with the given status.
+    pub async fn finish_store(&self, status: &str) -> anyhow::Result<()> {
+        let store_opt = { self.session_store.read().await.clone() };
+        let sid_opt = { self.session_id.read().await.clone() };
+        if let (Some(store), Some(sid)) = (store_opt, sid_opt) {
+            store.finish(&sid, status, 0).await?;
+        }
+        Ok(())
+    }
+
+    /// Load a prior session and run one more turn with `instruction`.
+    pub async fn resume(
+        &self,
+        session_id: &str,
+        instruction: String,
+    ) -> anyhow::Result<amplifier_module_tool_task::SpawnResult> {
+        let store = {
+            self.session_store
+                .read()
+                .await
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("resume requires an attached SessionStore"))?
+        };
+
+        if !store.exists(session_id).await {
+            anyhow::bail!("session not found: {session_id}");
+        }
+
+        let prior = store.load(session_id).await?;
+        *self.session_id.write().await = Some(session_id.to_string());
+
+        // Replay prior Turn events as conversation history.
+        let history: Vec<serde_json::Value> = prior
+            .iter()
+            .filter_map(|e| {
+                if let SessionEvent::Turn { role, content, .. } = e {
+                    Some(serde_json::json!({"role": role, "content": content}))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut ctx = SimpleContext::new(history);
+        let hooks = HookRegistry::new();
+        let response = self
+            .execute(instruction, &mut ctx, &hooks, |_| {})
+            .await?;
+
+        Ok(amplifier_module_tool_task::SpawnResult {
+            response,
+            session_id: session_id.to_string(),
+        })
     }
 
     /// Register a provider by name.
@@ -117,6 +218,14 @@ impl LoopOrchestrator {
             .add_message(json!({"role": "user", "content": prompt}))
             .await
             .map_err(|e| anyhow::anyhow!("add_message failed: {e}"))?;
+
+        // 4a. Persist user turn
+        self.persist(SessionEvent::Turn {
+            role: "user".into(),
+            content: prompt.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        })
+        .await;
 
         // 5. Build tool specs
         let tool_specs: Vec<ToolSpec> = tools.values().map(|t| t.get_spec()).collect();
@@ -224,6 +333,12 @@ impl LoopOrchestrator {
                     hooks
                         .emit(HookEvent::TurnEnd, json!({"text": text, "step": step}))
                         .await;
+                    self.persist(SessionEvent::Turn {
+                        role: "assistant".into(),
+                        content: text.clone(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                    })
+                    .await;
                     return Ok(text);
                 }
 
@@ -364,6 +479,14 @@ pub fn response_to_message(content: &[ContentBlock]) -> Value {
 
 #[async_trait]
 impl SubagentRunner for LoopOrchestrator {
+    async fn resume(
+        &self,
+        session_id: &str,
+        instruction: String,
+    ) -> anyhow::Result<amplifier_module_tool_task::SpawnResult> {
+        LoopOrchestrator::resume(self, session_id, instruction).await
+    }
+
     async fn run(&self, req: SpawnRequest) -> anyhow::Result<String> {
         if req.agent_system_prompt.is_some() || !req.tool_filter.is_empty() {
             // Build a child orchestrator with overridden config
@@ -523,6 +646,158 @@ mod tests {
             "snapshot_providers should contain 'anthropic' after registration"
         );
         assert_eq!(snapshot.len(), 1, "snapshot should have exactly 1 provider");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test: execute_persists_user_and_assistant_turns
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn execute_persists_user_and_assistant_turns() {
+        use amplifier_module_context_simple::SimpleContext;
+        use amplifier_module_session_store::{FileSessionStore, SessionEvent, SessionStore};
+        let tmp = tempfile::TempDir::new().unwrap();
+        let store = std::sync::Arc::new(FileSessionStore::new_with_root(tmp.path().to_path_buf()));
+        let session_id = "test-persist-1".to_string();
+
+        let orch = LoopOrchestrator::new(LoopConfig::default());
+        orch.attach_store(
+            store.clone() as std::sync::Arc<dyn SessionStore>,
+            session_id.clone(),
+            "test-agent".into(),
+            None,
+        );
+        let provider: std::sync::Arc<dyn Provider> =
+            std::sync::Arc::new(MockProvider::new("anthropic"));
+        orch.register_provider("anthropic".into(), provider).await;
+
+        store
+            .begin(
+                &session_id,
+                amplifier_module_session_store::SessionMetadata {
+                    session_id: session_id.clone(),
+                    agent_name: "test-agent".into(),
+                    parent_id: None,
+                    created: chrono::Utc::now().to_rfc3339(),
+                    status: "active".into(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let mut ctx = SimpleContext::new(vec![]);
+        let hooks = HookRegistry::new();
+        orch.execute("hello".to_string(), &mut ctx, &hooks, |_| {})
+            .await
+            .unwrap();
+        orch.finish_store("success").await.unwrap();
+
+        let events = store.load(&session_id).await.unwrap();
+        assert!(
+            events.len() >= 3,
+            "expected session_start + user turn + assistant turn, got {}",
+            events.len()
+        );
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::Turn { role, .. } if role == "user")));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::Turn { role, .. } if role == "assistant")));
+        assert!(matches!(
+            events.last().unwrap(),
+            SessionEvent::SessionEnd { .. }
+        ));
+    }
+
+    // -----------------------------------------------------------------------
+    // Test: resume_replays_prior_turns_into_context
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn resume_replays_prior_turns_into_context() {
+        use amplifier_module_session_store::{FileSessionStore, SessionEvent, SessionStore};
+        use amplifier_module_tool_task::SubagentRunner;
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let store =
+            std::sync::Arc::new(FileSessionStore::new_with_root(tmp.path().to_path_buf()));
+        let sid = "resume-1".to_string();
+
+        // Seed a prior completed session
+        store
+            .begin(
+                &sid,
+                amplifier_module_session_store::SessionMetadata {
+                    session_id: sid.clone(),
+                    agent_name: "explorer".into(),
+                    parent_id: None,
+                    created: "t0".into(),
+                    status: "active".into(),
+                },
+            )
+            .await
+            .unwrap();
+        store
+            .append(
+                &sid,
+                SessionEvent::Turn {
+                    role: "user".into(),
+                    content: "list rust files".into(),
+                    timestamp: "t1".into(),
+                },
+            )
+            .await
+            .unwrap();
+        store
+            .append(
+                &sid,
+                SessionEvent::Turn {
+                    role: "assistant".into(),
+                    content: "found: a.rs, b.rs".into(),
+                    timestamp: "t2".into(),
+                },
+            )
+            .await
+            .unwrap();
+        store.finish(&sid, "success", 1).await.unwrap();
+
+        // Create fresh orchestrator (process restart simulation)
+        let orch = LoopOrchestrator::new(LoopConfig::default());
+        orch.attach_store(
+            store.clone() as std::sync::Arc<dyn SessionStore>,
+            sid.clone(),
+            "explorer".into(),
+            None,
+        );
+        orch.register_provider(
+            "anthropic".into(),
+            std::sync::Arc::new(MockProvider::new("anthropic")) as std::sync::Arc<dyn Provider>,
+        )
+        .await;
+
+        let result = SubagentRunner::resume(&orch, &sid, "now count them".to_string())
+            .await
+            .unwrap();
+        assert_eq!(result.session_id, sid);
+
+        let events = store.load(&sid).await.unwrap();
+        let user_contents: Vec<&str> = events
+            .iter()
+            .filter_map(|e| {
+                if let SessionEvent::Turn { role, content, .. } = e {
+                    if role == "user" {
+                        Some(content.as_str())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(user_contents.iter().any(|c| c.contains("list rust files")));
+        assert!(user_contents.iter().any(|c| c.contains("now count them")));
     }
 
     // -----------------------------------------------------------------------
