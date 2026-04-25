@@ -1,0 +1,68 @@
+name: copilot
+description: GitHub Copilot matrix — OpenAI-compatible models via Copilot provider
+roles:
+  general:
+    description: Versatile catch-all, no specialization needed
+    candidates:
+      - provider: copilot
+        model: gpt-4.1
+  fast:
+    description: Quick utility tasks — parsing, classification, file ops, bulk work
+    candidates:
+      - provider: copilot
+        model: gpt-4o-mini
+  coding:
+    description: Code generation, implementation, debugging
+    candidates:
+      - provider: copilot
+        model: gpt-4.1
+  ui-coding:
+    description: Frontend/UI code — components, layouts, styling, spatial reasoning
+    candidates:
+      - provider: copilot
+        model: gpt-4.1
+  security-audit:
+    description: Vulnerability assessment, attack surface analysis, code auditing
+    candidates:
+      - provider: copilot
+        model: o3*
+  reasoning:
+    description: Deep architectural reasoning, system design, complex multi-step analysis
+    candidates:
+      - provider: copilot
+        model: o3*
+  critique:
+    description: Analytical evaluation — finding flaws in existing work, not generating solutions
+    candidates:
+      - provider: copilot
+        model: gpt-4.1
+  creative:
+    description: Design direction, aesthetic judgment, high-quality creative output
+    candidates:
+      - provider: copilot
+        model: gpt-4.1
+  writing:
+    description: Long-form content — documentation, marketing, case studies, storytelling
+    candidates:
+      - provider: copilot
+        model: gpt-4.1
+  research:
+    description: Deep investigation, information synthesis across multiple sources
+    candidates:
+      - provider: copilot
+        model: gpt-4.1
+  vision:
+    description: Understanding visual input — screenshots, diagrams, UI mockups
+    candidates:
+      - provider: copilot
+        model: gpt-4.1
+  image-gen:
+    description: Image generation, visual mockup creation, visual ideation
+    candidates:
+      - provider: copilot
+        model: gpt-image-1
+  critical-ops:
+    description: High-reliability operational tasks — infrastructure, orchestration, coordination
+    candidates:
+      - provider: copilot
+        model: o3*
