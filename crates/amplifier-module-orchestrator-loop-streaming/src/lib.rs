@@ -1,5 +1,6 @@
 //! LoopOrchestrator — streaming agent loop with hooks, step limit, and tool dispatch.
 
+/// Hook integration points for the agent loop (step start, end, tool call, etc.).
 pub mod hooks;
 
 pub use hooks::*;
@@ -38,8 +39,11 @@ pub struct LoopConfig {
 
 /// Agent-loop orchestrator with hook integration, step limit, and tool dispatch.
 pub struct LoopOrchestrator {
+    /// Loop configuration (max steps, system prompt).
     pub config: LoopConfig,
+    /// Registered providers keyed by name.
     pub providers: RwLock<HashMap<String, Arc<dyn Provider>>>,
+    /// Registered tools keyed by name.
     pub tools: RwLock<HashMap<String, Arc<dyn Tool>>>,
 }
 

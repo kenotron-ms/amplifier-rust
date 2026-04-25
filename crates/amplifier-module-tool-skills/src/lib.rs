@@ -1,6 +1,7 @@
 //! Skills tool module — provides the `load_skill` tool for discovering and
 //! dispatching Amplifier skills from the file system.
 
+/// SKILL.md frontmatter parser.
 pub mod parser;
 
 use std::collections::HashMap;

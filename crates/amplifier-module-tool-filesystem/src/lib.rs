@@ -7,9 +7,13 @@
 //! - [`GlobTool`]: Match files using glob patterns
 //! - [`GrepTool`]: Search file contents using regex patterns
 
+/// Glob pattern file-matching tool.
 pub mod glob_tool;
+/// Regex-based file content search tool.
 pub mod grep_tool;
+/// File read tool.
 pub mod read;
+/// File write and edit tools.
 pub mod write;
 
 pub use glob_tool::GlobTool;

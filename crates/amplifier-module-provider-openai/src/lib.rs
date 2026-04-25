@@ -3,6 +3,7 @@
 //! Implements the [`Provider`] trait backed by OpenAI's `/v1/responses` endpoint,
 //! with automatic multi-turn continuation when the model hits `max_output_tokens`.
 
+/// Responses API wire types for the `/v1/responses` endpoint.
 pub mod responses;
 
 use std::collections::HashMap;

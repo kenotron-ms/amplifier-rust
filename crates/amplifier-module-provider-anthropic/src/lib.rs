@@ -4,6 +4,7 @@
 //! with exponential-backoff retry logic, message-format conversion, and an
 //! SSE parser for streaming responses.
 
+/// SSE streaming parser for Anthropic responses.
 pub mod streaming;
 
 use std::collections::HashMap;

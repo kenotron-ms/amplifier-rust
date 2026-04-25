@@ -13,6 +13,7 @@
 //!
 //! Both backends produce a JSON array of `{file, line, content}` objects.
 
+/// ripgrep-based search backend.
 pub mod ripgrep;
 
 use std::collections::HashMap;

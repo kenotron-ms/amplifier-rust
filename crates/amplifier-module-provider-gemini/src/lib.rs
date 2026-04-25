@@ -1,5 +1,6 @@
 //! Gemini Developer API provider for the Amplifier framework.
 
+/// Gemini API wire types (requests, responses, content parts).
 pub mod types;
 
 use std::collections::HashMap;

@@ -38,8 +38,11 @@ use amplifier_core::traits::Tool;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TodoStatus {
+    /// Task has not been started yet.
     Pending,
+    /// Task is currently being worked on.
     InProgress,
+    /// Task has been finished.
     Completed,
 }
 

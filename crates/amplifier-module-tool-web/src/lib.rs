@@ -1,4 +1,10 @@
+//! Web tools for the Amplifier agent framework.
+//!
+//! Provides [`WebToolSuite`] which exposes `fetch_url` and `search_web` tools.
+
+/// HTTP URL fetch tool (`fetch_url`).
 pub mod fetch;
+/// Web search tool (`search_web`).
 pub mod search;
 
 use std::sync::Arc;

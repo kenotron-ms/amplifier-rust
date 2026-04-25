@@ -1,4 +1,11 @@
+//! Session store — persistence layer for agent session events and metadata.
+//!
+//! Provides [`SessionStore`], a trait for persisting session events,
+//! and [`FileSessionStore`], a file-based implementation.
+
+/// File-based session store implementation.
 pub mod file;
+/// Session data format types (events, metadata, index entries).
 pub mod format;
 
 pub use file::FileSessionStore;

@@ -3,7 +3,9 @@
 //! This crate provides the [`DelegateTool`] which enables agents to delegate
 //! work to named sub-agents from an [`AgentRegistry`].
 
+/// Conversation context extraction helpers.
 pub mod context;
+/// Agent registry resolver.
 pub mod resolver;
 
 use std::sync::Arc;

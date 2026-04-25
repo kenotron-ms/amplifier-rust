@@ -9,6 +9,7 @@
 //! The **Android profile** is the Phase 3 addition, providing allowlist-based
 //! safety for Android/toybox environments (see [`profiles::ANDROID_TOYBOX_ALLOWLIST`]).
 
+/// Safety profiles controlling which shell commands are permitted.
 pub mod profiles;
 
 pub use profiles::SafetyProfile;
