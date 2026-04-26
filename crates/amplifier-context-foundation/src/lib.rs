@@ -84,7 +84,9 @@ impl Hook for FoundationContextHook {
     }
 
     async fn handle(&self, _ctx: &HookContext) -> HookResult {
-        HookResult::InjectContext(self.context.clone())
+        // SystemPromptAddendum appends to the system prompt (high-weight).
+        // InjectContext injects as a user-role message (low-weight, ignored by the LLM).
+        HookResult::SystemPromptAddendum(self.context.clone())
     }
 }
 
@@ -152,11 +154,11 @@ mod tests {
         };
         let result = hook.handle(&ctx).await;
         match result {
-            HookResult::InjectContext(text) => {
+            HookResult::SystemPromptAddendum(text) => {
                 assert!(text.contains("ORCHESTRATOR"));
                 assert!(text.contains("Parallel"));
             }
-            other => panic!("expected InjectContext, got {:?}", other),
+            other => panic!("expected SystemPromptAddendum, got {:?}", other),
         }
     }
 }
