@@ -28,6 +28,11 @@ pub struct DelegateConfig {
     pub max_context_turns: usize,
     /// Tool names to exclude from child sessions. Default: `["delegate"]`.
     pub exclude_tools: Vec<String>,
+    /// Maximum wall-clock time for a child session. Default: `None` (disabled).
+    ///
+    /// Mirrors Python `settings.timeout` — disabled by default. Set only when
+    /// you need a hard wall-clock cap; otherwise the sub-agent runs to completion.
+    pub timeout: Option<std::time::Duration>,
 }
 
 impl Default for DelegateConfig {
@@ -36,6 +41,7 @@ impl Default for DelegateConfig {
             max_self_delegation_depth: 3,
             max_context_turns: 10,
             exclude_tools: vec!["delegate".to_string()],
+            timeout: None, // disabled — matches Python `settings.timeout` default
         }
     }
 }
@@ -177,6 +183,7 @@ impl Tool for DelegateTool {
         let runner = Arc::clone(&self.runner);
         let registry = Arc::clone(&self.registry);
         let store = self.store.clone();
+        let config_timeout = self.config.timeout; // None by default — matches Python spec
         Box::pin(async move {
             let agent = input["agent"]
                 .as_str()
@@ -225,24 +232,27 @@ impl Tool for DelegateTool {
                         message: format!("session not found: {sid}"),
                     });
                 }
-                let spawn_result = tokio::time::timeout(
-                    std::time::Duration::from_secs(180),
-                    runner.resume(&sid, instruction),
-                )
-                .await
-                .map_err(|_| ToolError::Other {
-                    message: format!(
-                        "delegate to '{}' timed out after 180 seconds. \
-                         The sub-agent may be in a loop or unreachable.",
-                        agent
-                    ),
-                })?
-                .map_err(|e| ToolError::ExecutionFailed {
-                    message: e.to_string(),
-                    stdout: None,
-                    stderr: None,
-                    exit_code: None,
-                })?;
+                let resume_fut = runner.resume(&sid, instruction);
+                let spawn_result = if let Some(dur) = config_timeout {
+                    tokio::time::timeout(dur, resume_fut)
+                        .await
+                        .map_err(|_| ToolError::Other {
+                            message: format!(
+                                "Agent '{}' timed out after {}s (delegate tool session-level \
+                                 timeout). Increase or disable timeout via DelegateConfig.timeout.",
+                                agent, dur.as_secs()
+                            ),
+                        })?
+                        .map_err(|e| ToolError::ExecutionFailed {
+                            message: e.to_string(),
+                            stdout: None, stderr: None, exit_code: None,
+                        })?
+                } else {
+                    resume_fut.await.map_err(|e| ToolError::ExecutionFailed {
+                        message: e.to_string(),
+                        stdout: None, stderr: None, exit_code: None,
+                    })?
+                };
                 (spawn_result.response, spawn_result.session_id)
             } else {
                 // Normal run path.
@@ -255,24 +265,27 @@ impl Tool for DelegateTool {
                     agent_system_prompt,
                     tool_filter: vec![],
                 };
-                let response = tokio::time::timeout(
-                    std::time::Duration::from_secs(180),
-                    runner.run(req),
-                )
-                .await
-                .map_err(|_| ToolError::Other {
-                    message: format!(
-                        "delegate to '{}' timed out after 180 seconds. \
-                         The sub-agent may be in a loop or unreachable.",
-                        agent
-                    ),
-                })?
-                .map_err(|e| ToolError::ExecutionFailed {
-                    message: e.to_string(),
-                    stdout: None,
-                    stderr: None,
-                    exit_code: None,
-                })?;
+                let run_fut = runner.run(req);
+                let response = if let Some(dur) = config_timeout {
+                    tokio::time::timeout(dur, run_fut)
+                        .await
+                        .map_err(|_| ToolError::Other {
+                            message: format!(
+                                "Agent '{}' timed out after {}s (delegate tool session-level \
+                                 timeout). Increase or disable timeout via DelegateConfig.timeout.",
+                                agent, dur.as_secs()
+                            ),
+                        })?
+                        .map_err(|e| ToolError::ExecutionFailed {
+                            message: e.to_string(),
+                            stdout: None, stderr: None, exit_code: None,
+                        })?
+                } else {
+                    run_fut.await.map_err(|e| ToolError::ExecutionFailed {
+                        message: e.to_string(),
+                        stdout: None, stderr: None, exit_code: None,
+                    })?
+                };
                 (response, String::new())
             };
 
