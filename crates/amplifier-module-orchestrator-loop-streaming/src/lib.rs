@@ -493,7 +493,7 @@ impl SubagentRunner for LoopOrchestrator {
             // Sub-agents run until they have an answer — do NOT inherit max_steps from the
             // parent, which would artificially cap them at the parent's safety limit.
             let child_config = LoopConfig {
-                max_steps: None,
+                max_steps: self.config.max_steps, // inherit from parent — matches Python orchestrator_config
                 system_prompt: req
                     .agent_system_prompt
                     .unwrap_or_else(|| self.config.system_prompt.clone()),
