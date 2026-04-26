@@ -226,13 +226,13 @@ impl Tool for DelegateTool {
                     });
                 }
                 let spawn_result = tokio::time::timeout(
-                    std::time::Duration::from_secs(60),
+                    std::time::Duration::from_secs(180),
                     runner.resume(&sid, instruction),
                 )
                 .await
                 .map_err(|_| ToolError::Other {
                     message: format!(
-                        "delegate to '{}' timed out after 60 seconds. \
+                        "delegate to '{}' timed out after 180 seconds. \
                          The sub-agent may be in a loop or unreachable.",
                         agent
                     ),
@@ -256,13 +256,13 @@ impl Tool for DelegateTool {
                     tool_filter: vec![],
                 };
                 let response = tokio::time::timeout(
-                    std::time::Duration::from_secs(60),
+                    std::time::Duration::from_secs(180),
                     runner.run(req),
                 )
                 .await
                 .map_err(|_| ToolError::Other {
                     message: format!(
-                        "delegate to '{}' timed out after 60 seconds. \
+                        "delegate to '{}' timed out after 180 seconds. \
                          The sub-agent may be in a loop or unreachable.",
                         agent
                     ),
