@@ -30,21 +30,28 @@ use amplifier_module_orchestrator_loop_streaming::{Hook, HookContext, HookEvent,
 const EXP_LEAN_CONTEXT: &str = "\
 ## Delegate-First Operation
 
-DEFAULT: delegate to specialist agents. EXCEPTION: trivial single-step ops only.
-
+DEFAULT: delegate to specialist agents. EXCEPTION: trivial single-step ops only.\n\
 Use the `delegate` tool for: file exploration (>2 files), debugging, implementation, \
-architecture decisions, git operations, security review. \
-Available agents and their specialties are listed in the delegate tool's spec.
+architecture decisions, git operations, security review.\n\
 
-**Skills carry behavioral guidance — load on demand:**
-- `load_skill(\"brainstorming\")` — before any new feature or creative work
-- `load_skill(\"systematic-debugging\")` — before fixing any bug or failure
-- `load_skill(\"writing-plans\")` — before multi-step implementation tasks
-- `load_skill(\"test-driven-development\")` — before writing code
-- `load_skill(\"verification-before-completion\")` — before claiming work is done
+## Skill Discipline
+
+**If there is even a 1% chance a skill applies to what you are doing, you MUST load it \
+before responding.** Skills carry all behavioral guidance — they are not optional.\n\
+
+Available skills (use load_skill tool before acting on relevant tasks):\n\
+- **using-superpowers**: Load at the start of any conversation to establish skill-first discipline\n\
+- **brainstorming**: MUST load before any new feature, component, or creative work\n\
+- **systematic-debugging**: Load before fixing any bug or unexpected behavior\n\
+- **test-driven-development**: Load before writing implementation code\n\
+- **writing-plans**: Load before multi-step implementation tasks\n\
+- **verification-before-completion**: Load before claiming work is done or committing\n\
+- **dispatching-parallel-agents**: Load when 2+ independent tasks can run in parallel\n\
+- **subagent-driven-development**: Load when executing implementation plans with sub-agents\n\
+- **executing-plans**: Load when you have a written plan to execute\n\
 
 **Relay**: always summarize agent/tool results in your final message — \
-the user sees only your final response text, not intermediate tool output.
+the user sees only your final response text, not intermediate tool output.\
 ";
 
 // Old constants kept on disk (context/*.md) but no longer embedded here:
