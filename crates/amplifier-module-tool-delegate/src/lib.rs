@@ -197,10 +197,25 @@ impl Tool for DelegateTool {
                 .and_then(|v| v.as_str())
                 .map(String::from);
 
+            // Parse context_depth (default: Recent(5), matching Python reference).
+            let context_depth = match input.get("context_depth").and_then(|v| v.as_str()) {
+                Some("none") => amplifier_module_tool_task::ContextDepth::None,
+                Some("all") => amplifier_module_tool_task::ContextDepth::All,
+                _ => amplifier_module_tool_task::ContextDepth::Recent(5),
+            };
+
+            // Parse context_scope (default: Conversation).
+            let context_scope = match input.get("context_scope").and_then(|v| v.as_str()) {
+                Some("agents") => amplifier_module_tool_task::ContextScope::Agents,
+                Some("full") => amplifier_module_tool_task::ContextScope::Full,
+                _ => amplifier_module_tool_task::ContextScope::Conversation,
+            };
+
             // Resolve agent system prompt from registry if available.
             let agent_system_prompt = registry.get(&agent).map(|c| c.instruction.clone());
 
-            let response_text: String = if let Some(sid) = session_id {
+            let (response_text, used_session_id): (String, String) = if let Some(sid) = session_id
+            {
                 // Resume path — requires an attached store.
                 let store = store.as_ref().ok_or_else(|| ToolError::Other {
                     message: "session_id provided but no SessionStore configured".into(),
@@ -210,41 +225,70 @@ impl Tool for DelegateTool {
                         message: format!("session not found: {sid}"),
                     });
                 }
-                runner
-                    .resume(&sid, instruction)
-                    .await
-                    .map_err(|e| ToolError::ExecutionFailed {
-                        message: e.to_string(),
-                        stdout: None,
-                        stderr: None,
-                        exit_code: None,
-                    })?
-                    .response
+                let spawn_result = tokio::time::timeout(
+                    std::time::Duration::from_secs(60),
+                    runner.resume(&sid, instruction),
+                )
+                .await
+                .map_err(|_| ToolError::Other {
+                    message: format!(
+                        "delegate to '{}' timed out after 60 seconds. \
+                         The sub-agent may be in a loop or unreachable.",
+                        agent
+                    ),
+                })?
+                .map_err(|e| ToolError::ExecutionFailed {
+                    message: e.to_string(),
+                    stdout: None,
+                    stderr: None,
+                    exit_code: None,
+                })?;
+                (spawn_result.response, spawn_result.session_id)
             } else {
                 // Normal run path.
                 let req = SpawnRequest {
                     instruction,
-                    context_depth: amplifier_module_tool_task::ContextDepth::None,
-                    context_scope: amplifier_module_tool_task::ContextScope::Conversation,
+                    context_depth,
+                    context_scope,
                     context: vec![],
                     session_id: None,
                     agent_system_prompt,
                     tool_filter: vec![],
                 };
-                runner
-                    .run(req)
-                    .await
-                    .map_err(|e| ToolError::ExecutionFailed {
-                        message: e.to_string(),
-                        stdout: None,
-                        stderr: None,
-                        exit_code: None,
-                    })?
+                let response = tokio::time::timeout(
+                    std::time::Duration::from_secs(60),
+                    runner.run(req),
+                )
+                .await
+                .map_err(|_| ToolError::Other {
+                    message: format!(
+                        "delegate to '{}' timed out after 60 seconds. \
+                         The sub-agent may be in a loop or unreachable.",
+                        agent
+                    ),
+                })?
+                .map_err(|e| ToolError::ExecutionFailed {
+                    message: e.to_string(),
+                    stdout: None,
+                    stderr: None,
+                    exit_code: None,
+                })?;
+                (response, String::new())
             };
+
+            // Return rich JSON result matching Python reference format:
+            // { response, agent, status, turn_count, session_id }
+            let json_result = serde_json::json!({
+                "response": response_text,
+                "agent": agent,
+                "status": "success",
+                "turn_count": 1,
+                "session_id": used_session_id,
+            });
 
             Ok(ToolResult {
                 success: true,
-                output: Some(serde_json::Value::String(response_text)),
+                output: Some(json_result),
                 error: None,
             })
         })

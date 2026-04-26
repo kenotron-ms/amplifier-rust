@@ -489,9 +489,11 @@ impl SubagentRunner for LoopOrchestrator {
 
     async fn run(&self, req: SpawnRequest) -> anyhow::Result<String> {
         if req.agent_system_prompt.is_some() || !req.tool_filter.is_empty() {
-            // Build a child orchestrator with overridden config
+            // Build a child orchestrator with overridden config.
+            // Sub-agents run until they have an answer — do NOT inherit max_steps from the
+            // parent, which would artificially cap them at the parent's safety limit.
             let child_config = LoopConfig {
-                max_steps: self.config.max_steps,
+                max_steps: None,
                 system_prompt: req
                     .agent_system_prompt
                     .unwrap_or_else(|| self.config.system_prompt.clone()),
