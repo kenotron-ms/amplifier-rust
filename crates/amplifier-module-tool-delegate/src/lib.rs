@@ -131,37 +131,134 @@ impl Tool for DelegateTool {
     }
 
     fn description(&self) -> &str {
-        "Spawn a named sub-agent to handle a task. Supports self-delegation for recursion,          namespace:path resolution, and agent registry lookup."
+        "Spawn a specialist sub-agent to handle a task autonomously. \
+         Delegate aggressively — direct tool use only for trivial single-step work."
     }
 
     fn get_spec(&self) -> ToolSpec {
+        // ── Build dynamic agent catalogue from the registry ──────────────────
+        let agent_lines: Vec<String> = {
+            let mut names = self.registry.available_names();
+            names.sort();
+            names
+                .into_iter()
+                .map(|name| {
+                    let desc = self.registry
+                        .get(name)
+                        .map(|c| c.description.as_str())
+                        .unwrap_or("specialist sub-agent");
+                    format!("  - \"{name}\": {desc}")
+                })
+                .collect()
+        };
+        let agents_section = if agent_lines.is_empty() {
+            "  (no agents registered — add .md files to <vault>/.agents/)".to_string()
+        } else {
+            agent_lines.join("\n")
+        };
+
+        // ── Rich description — mirrors Python amplifier-module-tool-delegate ──
+        let description = format!(
+            r#"Spawn a specialist sub-agent to handle a task autonomously.
+
+## DEFAULT BEHAVIOUR: delegate first
+
+Direct tool use (read_file, bash, grep…) should be RARE — only for trivial single-step lookups.
+For anything beyond that, delegate to the right specialist and synthesise their result.
+
+## Available agents
+
+{agents_section}
+
+Use "self" to spawn a fresh instance of yourself (token conservation).
+
+## Choosing the right agent
+
+| Task | Agent |
+|------|-------|
+| Explore files, survey a codebase, read multiple files | "explorer" |
+| Architecture decisions, code review, design | "zen-architect" |
+| Debug errors, find root cause of failures | "bug-hunter" |
+| git commit, branch, PR, GitHub operations | "git-ops" |
+| Implement a feature from a spec | "modular-builder" |
+| Security review, vulnerability analysis | "security-guardian" |
+
+## Writing a good instruction
+
+Include WHAT and WHY — the sub-agent starts with no prior context.
+
+BAD:  "look at the code"
+GOOD: "Survey all Rust crates in /workspace/amplifier-rust/crates/ and return a table
+       showing crate name, purpose (tool/provider/orchestrator/context), and key public types."
+
+## Session resume
+
+The result includes a session_id. Pass it back as session_id to continue the same agent
+session — it remembers prior context and tool results from the previous call."#,
+            agents_section = agents_section,
+        );
+
+        // ── Parameter schemas ─────────────────────────────────────────────────
         let mut properties = HashMap::new();
+
         properties.insert(
             "agent".to_string(),
             serde_json::json!({
                 "type": "string",
-                "description": "Agent name to delegate to. Use 'self' for recursion,                                'namespace:path' for bundle agents, or a bare name for registry lookup."
+                "description": "Name of the agent to spawn. Use a bare name from the list above \
+                                (e.g. \"explorer\"), or \"self\" to spawn a fresh copy of yourself."
             }),
         );
+
         properties.insert(
             "instruction".to_string(),
             serde_json::json!({
                 "type": "string",
-                "description": "The instruction to give the sub-agent."
+                "description": "What you want the sub-agent to do. Be specific — include the \
+                                goal, relevant paths or identifiers, and what you want back. \
+                                The sub-agent has NO prior context from this conversation."
             }),
         );
+
         properties.insert(
             "context_depth".to_string(),
             serde_json::json!({
                 "type": "string",
-                "description": "How much context to pass: none | recent | all",
+                "description": "How much of the current conversation to share with the sub-agent. \
+                                \"none\" — fresh start, no prior context (fastest). \
+                                \"recent\" — last 5 turns (default, usually enough). \
+                                \"all\" — full conversation history (use when sub-agent needs \
+                                         deep context, e.g. continuing a long investigation).",
                 "enum": ["none", "recent", "all"]
+            }),
+        );
+
+        properties.insert(
+            "context_scope".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Which parts of the conversation to include. \
+                                \"conversation\" — user/assistant text only (default, safest). \
+                                \"agents\" — also include results from prior delegate calls \
+                                            (chain agents so B sees A's output). \
+                                \"full\" — all tool results too (complete mirror of this session).",
+                "enum": ["conversation", "agents", "full"]
+            }),
+        );
+
+        properties.insert(
+            "session_id".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Resume a previous sub-agent session. Omit to start fresh. \
+                                Pass the session_id from a prior delegate result to continue \
+                                the same agent with its accumulated context and tool history."
             }),
         );
 
         ToolSpec {
             name: "delegate".to_string(),
-            description: Some("Spawn a named sub-agent to handle a task.".to_string()),
+            description: Some(description),
             parameters: {
                 let mut params = HashMap::new();
                 params.insert("type".to_string(), serde_json::json!("object"));
