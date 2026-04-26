@@ -54,7 +54,6 @@ impl Default for DelegateConfig {
 pub struct DelegateTool {
     runner: Arc<dyn SubagentRunner>,
     registry: Arc<AgentRegistry>,
-    #[allow(dead_code)]
     config: DelegateConfig,
     /// Optional session store for resume path.
     store: Option<Arc<dyn SessionStore>>,
@@ -281,6 +280,8 @@ session — it remembers prior context and tool results from the previous call."
         let registry = Arc::clone(&self.registry);
         let store = self.store.clone();
         let config_timeout = self.config.timeout; // None by default — matches Python spec
+        let config_exclude_tools = self.config.exclude_tools.clone();
+        let config_max_context_turns = self.config.max_context_turns;
         Box::pin(async move {
             let agent = input["agent"]
                 .as_str()
@@ -305,7 +306,7 @@ session — it remembers prior context and tool results from the previous call."
             let context_depth = match input.get("context_depth").and_then(|v| v.as_str()) {
                 Some("none") => amplifier_module_tool_task::ContextDepth::None,
                 Some("all") => amplifier_module_tool_task::ContextDepth::All,
-                _ => amplifier_module_tool_task::ContextDepth::Recent(5),
+                _ => amplifier_module_tool_task::ContextDepth::Recent(config_max_context_turns),
             };
 
             // Parse context_scope (default: Conversation).
@@ -318,7 +319,7 @@ session — it remembers prior context and tool results from the previous call."
             // Resolve agent system prompt from registry if available.
             let agent_system_prompt = registry.get(&agent).map(|c| c.instruction.clone());
 
-            let (response_text, used_session_id): (String, String) = if let Some(sid) = session_id
+            let (response_text, used_session_id, turn_count): (String, String, usize) = if let Some(sid) = session_id
             {
                 // Resume path — requires an attached store.
                 let store = store.as_ref().ok_or_else(|| ToolError::Other {
@@ -350,7 +351,7 @@ session — it remembers prior context and tool results from the previous call."
                         stdout: None, stderr: None, exit_code: None,
                     })?
                 };
-                (spawn_result.response, spawn_result.session_id)
+                (spawn_result.response, spawn_result.session_id, spawn_result.turn_count)
             } else {
                 // Normal run path.
                 let req = SpawnRequest {
@@ -360,7 +361,7 @@ session — it remembers prior context and tool results from the previous call."
                     context: vec![],
                     session_id: None,
                     agent_system_prompt,
-                    tool_filter: vec![],
+                    tool_filter: config_exclude_tools,
                 };
                 let run_fut = runner.run(req);
                 let response = if let Some(dur) = config_timeout {
@@ -383,7 +384,7 @@ session — it remembers prior context and tool results from the previous call."
                         stdout: None, stderr: None, exit_code: None,
                     })?
                 };
-                (response, String::new())
+                (response, String::new(), 1)
             };
 
             // Return rich JSON result matching Python reference format:
@@ -392,7 +393,7 @@ session — it remembers prior context and tool results from the previous call."
                 "response": response_text,
                 "agent": agent,
                 "status": "success",
-                "turn_count": 1,
+                "turn_count": turn_count,
                 "session_id": used_session_id,
             });
 
@@ -549,7 +550,7 @@ mod tests {
             }
             async fn resume(&self, session_id: &str, _instruction: String) -> anyhow::Result<SpawnResult> {
                 *self.called.lock().unwrap() = Some(format!("resume:{session_id}"));
-                Ok(SpawnResult { response: "from resume".into(), session_id: session_id.into() })
+                Ok(SpawnResult { response: "from resume".into(), session_id: session_id.into(), turn_count: 1 })
             }
         }
 

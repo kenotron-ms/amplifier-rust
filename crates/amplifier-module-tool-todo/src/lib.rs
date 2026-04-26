@@ -68,9 +68,29 @@ pub struct TodoItem {
     /// Imperative description of the task.
     pub content: String,
     /// Present-continuous form (e.g., "Running tests").
+    #[serde(rename = "activeForm")]
     pub active_form: String,
-    /// Current status string (e.g., "pending", "in_progress", "completed").
+    /// Current status string — one of "pending", "in_progress", "completed".
     pub status: String,
+}
+
+// ---------------------------------------------------------------------------
+// Valid status values
+// ---------------------------------------------------------------------------
+
+const VALID_STATUSES: &[&str] = &["pending", "in_progress", "completed"];
+
+fn validate_status(status: &str) -> Result<(), ToolError> {
+    if VALID_STATUSES.contains(&status) {
+        Ok(())
+    } else {
+        Err(ToolError::Other {
+            message: format!(
+                "Invalid status '{}' — must be pending, in_progress, or completed",
+                status
+            ),
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +115,7 @@ impl Default for TodoTool {
 }
 
 impl TodoTool {
-    /// Serialise the current item list into the standard tool output shape.
+    /// Serialise the current item list into the standard list output shape.
     ///
     /// ```json
     /// { "count": 2, "todos": [{ "id": "...", "content": "...", ... }] }
@@ -104,11 +124,37 @@ impl TodoTool {
         json!({
             "count": items.len(),
             "todos": items.iter().map(|item| json!({
-                "id":          item.id,
-                "content":     item.content,
-                "active_form": item.active_form,
-                "status":      item.status,
+                "id":         item.id,
+                "content":    item.content,
+                "activeForm": item.active_form,
+                "status":     item.status,
             })).collect::<Vec<_>>()
+        })
+    }
+
+    /// Serialise after a create/update with status counts.
+    ///
+    /// ```json
+    /// { "count": 3, "status": "updated", "todos": [...],
+    ///   "pending": 1, "in_progress": 1, "completed": 1 }
+    /// ```
+    fn to_summary_output(items: &[TodoItem]) -> Value {
+        let pending = items.iter().filter(|i| i.status == "pending").count();
+        let in_progress = items.iter().filter(|i| i.status == "in_progress").count();
+        let completed = items.iter().filter(|i| i.status == "completed").count();
+
+        json!({
+            "count":       items.len(),
+            "status":      "updated",
+            "todos":       items.iter().map(|item| json!({
+                "id":         item.id,
+                "content":    item.content,
+                "activeForm": item.active_form,
+                "status":     item.status,
+            })).collect::<Vec<_>>(),
+            "pending":     pending,
+            "in_progress": in_progress,
+            "completed":   completed,
         })
     }
 
@@ -138,30 +184,34 @@ impl TodoTool {
 
                 let new_items: Vec<TodoItem> = todos_arr
                     .iter()
-                    .map(|t| TodoItem {
-                        id: Uuid::new_v4().to_string(),
-                        content: t
-                            .get("content")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        active_form: t
-                            .get("active_form")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        status: t
+                    .map(|t| -> Result<TodoItem, ToolError> {
+                        let status = t
                             .get("status")
                             .and_then(|v| v.as_str())
                             .unwrap_or("pending")
-                            .to_string(),
+                            .to_string();
+                        validate_status(&status)?;
+                        Ok(TodoItem {
+                            id: Uuid::new_v4().to_string(),
+                            content: t
+                                .get("content")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            active_form: t
+                                .get("activeForm")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            status,
+                        })
                     })
-                    .collect();
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 let output = {
                     let mut items = self.items.lock().unwrap();
                     *items = new_items;
-                    Self::to_output(&items)
+                    Self::to_summary_output(&items)
                 };
 
                 Ok(ToolResult {
@@ -203,7 +253,8 @@ impl Tool for TodoTool {
     fn description(&self) -> &str {
         "Manage an in-memory session-scoped todo list. \
          Actions: create (replace all todos), update (same as create), \
-         list (return current todos). IDs are generated via UUID v4."
+         list (return current todos). IDs are generated via UUID v4. \
+         Keep exactly ONE item as `in_progress` at a time."
     }
 
     fn get_spec(&self) -> ToolSpec {
@@ -226,11 +277,11 @@ impl Tool for TodoTool {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "content":     { "type": "string", "description": "Imperative task description" },
-                        "active_form": { "type": "string", "description": "Present-continuous form" },
-                        "status":      { "type": "string", "description": "Task status string" }
+                        "content":    { "type": "string", "description": "Imperative task description" },
+                        "activeForm": { "type": "string", "description": "Present-continuous form (e.g., 'Running tests')" },
+                        "status":     { "type": "string", "enum": ["pending", "in_progress", "completed"], "description": "Task status" }
                     },
-                    "required": ["content", "active_form", "status"]
+                    "required": ["content", "activeForm", "status"]
                 }
             }),
         );
@@ -246,7 +297,8 @@ impl Tool for TodoTool {
             description: Some(
                 "Manage an in-memory session-scoped todo list. \
                  Actions: create (replace all todos), update (same as create), \
-                 list (return current todos)."
+                 list (return current todos). \
+                 Keep exactly ONE item as `in_progress` at a time."
                     .to_string(),
             ),
             extensions: HashMap::new(),

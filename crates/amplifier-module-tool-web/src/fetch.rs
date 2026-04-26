@@ -1,4 +1,5 @@
-//! fetch.rs — FetchUrlTool with HTML stripping and 8KB truncation.
+//! fetch.rs — WebFetchTool with HTML stripping, configurable offset/limit, SSRF protection,
+//! and structured JSON response metadata.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -18,8 +19,8 @@ use amplifier_core::traits::Tool;
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_BYTES: usize = 8 * 1024;
-const TRUNCATION_NOTICE: &str = "[...truncated at 8KB]";
+/// Default maximum bytes returned in a single response (200 KB).
+const DEFAULT_LIMIT: usize = 200 * 1024;
 
 // ---------------------------------------------------------------------------
 // Regex cache
@@ -55,15 +56,13 @@ fn get_regexes() -> &'static HtmlRegexes {
 // strip_html
 // ---------------------------------------------------------------------------
 
-/// Strip HTML from `html`, collapse whitespace, and truncate at 8KB.
+/// Strip HTML from `html` and collapse whitespace.
 ///
 /// Steps:
 /// 1. Remove block-level noise (`<script>`, `<style>`, `<nav>`, `<header>`,
 ///    `<footer>` — tags **and** their content).
 /// 2. Strip all remaining HTML tags.
 /// 3. Collapse runs of whitespace to a single space and trim.
-/// 4. If the result exceeds `MAX_BYTES`, truncate and append
-///    `TRUNCATION_NOTICE`.
 pub fn strip_html(html: &str) -> String {
     let re = get_regexes();
 
@@ -79,29 +78,82 @@ pub fn strip_html(html: &str) -> String {
 
     // Step 3 — collapse whitespace and trim
     let s = re.whitespace.replace_all(&s, " ");
-    let mut result = s.trim().to_string();
+    s.trim().to_string()
+}
 
-    // Step 4 — truncate at MAX_BYTES
-    if result.len() > MAX_BYTES {
-        // Truncate at a valid UTF-8 char boundary at or before MAX_BYTES
-        let boundary = result
-            .char_indices()
-            .take_while(|&(i, _)| i < MAX_BYTES)
-            .last()
-            .map(|(i, c)| i + c.len_utf8())
-            .unwrap_or(MAX_BYTES);
-        result.truncate(boundary);
-        result.push_str(TRUNCATION_NOTICE);
+// ---------------------------------------------------------------------------
+// SSRF protection
+// ---------------------------------------------------------------------------
+
+/// Return `true` if the URL's host is a private or loopback address.
+///
+/// Blocked ranges:
+/// - `localhost` / `*.localhost` (domain)
+/// - `127.0.0.0/8` (IPv4 loopback)
+/// - `::1` (IPv6 loopback)
+/// - `10.0.0.0/8` (RFC-1918 private)
+/// - `192.168.0.0/16` (RFC-1918 private)
+/// - `172.16.0.0/12` (RFC-1918 private, 172.16–172.31)
+/// - `169.254.0.0/16` (link-local / APIPA)
+fn is_private_host(url_str: &str) -> Result<bool, ToolError> {
+    let parsed = url::Url::parse(url_str).map_err(|e| ToolError::Other {
+        message: format!("invalid URL: {}", e),
+    })?;
+
+    match parsed.host() {
+        Some(url::Host::Domain(host)) => {
+            let lower = host.to_lowercase();
+            // "localhost" or "foo.localhost"
+            Ok(lower == "localhost" || lower.ends_with(".localhost"))
+        }
+        Some(url::Host::Ipv4(addr)) => {
+            let [a, b, _, _] = addr.octets();
+            Ok(a == 127                               // 127.0.0.0/8   loopback
+                || a == 10                            // 10.0.0.0/8    private
+                || (a == 192 && b == 168)             // 192.168.0.0/16
+                || (a == 172 && (16..=31).contains(&b)) // 172.16.0.0/12
+                || (a == 169 && b == 254))            // 169.254.0.0/16 link-local
+        }
+        Some(url::Host::Ipv6(addr)) => Ok(addr.is_loopback()),
+        None => Err(ToolError::Other {
+            message: "invalid URL: no host found".to_string(),
+        }),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// slice_text
+// ---------------------------------------------------------------------------
+
+/// Return a substring of `text` starting at byte `offset`, up to `limit` bytes,
+/// clamped to valid UTF-8 character boundaries.
+fn slice_text(text: &str, offset: usize, limit: usize) -> &str {
+    let len = text.len();
+    if offset >= len {
+        return "";
     }
 
-    result
+    // Advance start to the next valid char boundary at or after `offset`.
+    let start = (offset..=len)
+        .find(|&i| text.is_char_boundary(i))
+        .unwrap_or(len);
+
+    let end_raw = (start + limit).min(len);
+
+    // Retreat end to the nearest valid char boundary at or before `end_raw`.
+    let end = (start..=end_raw)
+        .rev()
+        .find(|&i| text.is_char_boundary(i))
+        .unwrap_or(start);
+
+    &text[start..end]
 }
 
 // ---------------------------------------------------------------------------
 // FetchUrlTool
 // ---------------------------------------------------------------------------
 
-/// Tool that fetches a URL and returns its content as stripped text.
+/// Tool that fetches a URL and returns its content as text with structured metadata.
 pub struct FetchUrlTool {
     /// Default client with a 30-second timeout.
     client: reqwest::Client,
@@ -126,11 +178,11 @@ impl Default for FetchUrlTool {
 
 impl Tool for FetchUrlTool {
     fn name(&self) -> &str {
-        "fetch_url"
+        "web_fetch"
     }
 
     fn description(&self) -> &str {
-        "Fetch content from a URL and return as text"
+        "Fetch content from a web URL"
     }
 
     fn get_spec(&self) -> ToolSpec {
@@ -140,15 +192,31 @@ impl Tool for FetchUrlTool {
             "url".to_string(),
             json!({
                 "type": "string",
-                "description": "The URL to fetch"
+                "description": "URL to fetch content from"
             }),
         );
         properties.insert(
-            "timeout_secs".to_string(),
+            "save_to_file".to_string(),
+            json!({
+                "type": "string",
+                "description": "Save full content to this file path instead of returning in response. \
+                                Returns metadata + preview when set."
+            }),
+        );
+        properties.insert(
+            "offset".to_string(),
             json!({
                 "type": "integer",
-                "description": "Request timeout in seconds",
-                "default": 10
+                "description": "Start reading from byte N (default 0). Use for pagination.",
+                "default": 0
+            }),
+        );
+        properties.insert(
+            "limit".to_string(),
+            json!({
+                "type": "integer",
+                "description": "Max bytes to return (default 200KB). Use for pagination.",
+                "default": DEFAULT_LIMIT
             }),
         );
 
@@ -158,9 +226,9 @@ impl Tool for FetchUrlTool {
         parameters.insert("required".to_string(), json!(["url"]));
 
         ToolSpec {
-            name: "fetch_url".to_string(),
+            name: "web_fetch".to_string(),
             parameters,
-            description: Some("Fetch content from a URL and return as text".to_string()),
+            description: Some("Fetch content from a web URL".to_string()),
             extensions: HashMap::new(),
         }
     }
@@ -180,20 +248,34 @@ impl Tool for FetchUrlTool {
                 }
             };
 
-            // --- Extract timeout_secs (default 10) ---
-            let timeout_secs = input
-                .get("timeout_secs")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(10);
+            // --- SSRF protection ---
+            if is_private_host(&url)? {
+                return Err(ToolError::Other {
+                    message: "Blocked: private/loopback addresses not allowed".to_string(),
+                });
+            }
 
-            // --- Build per-request client with specified timeout ---
-            let client = reqwest::Client::builder()
-                .timeout(Duration::from_secs(timeout_secs))
-                .build()
-                .unwrap_or_else(|_| self.client.clone());
+            // --- Optional parameters ---
+            let save_to_file: Option<String> = input
+                .get("save_to_file")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+
+            let offset: usize = input
+                .get("offset")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+
+            let limit: usize = input
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or(DEFAULT_LIMIT);
 
             // --- Perform GET request ---
-            let response = client
+            let response = self
+                .client
                 .get(&url)
                 .header(reqwest::header::USER_AGENT, "amplifier-tool-web/0.1")
                 .send()
@@ -210,17 +292,66 @@ impl Tool for FetchUrlTool {
                 });
             }
 
-            // --- Read body text ---
-            let body = response.text().await.map_err(|e| ToolError::Other {
+            // --- Extract content-type before consuming response ---
+            let content_type = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("application/octet-stream")
+                .to_string();
+
+            // --- Read body bytes ---
+            let body_bytes = response.bytes().await.map_err(|e| ToolError::Other {
                 message: format!("failed to read response body: {}", e),
             })?;
 
-            // --- Strip HTML and truncate ---
-            let text = strip_html(&body);
+            let total_bytes = body_bytes.len();
+
+            // --- Convert to text (lossy UTF-8) ---
+            let raw_text = String::from_utf8_lossy(&body_bytes).into_owned();
+
+            // --- Strip HTML when the response is an HTML document ---
+            let is_html = content_type.contains("text/html");
+            let processed = if is_html {
+                strip_html(&raw_text)
+            } else {
+                raw_text
+            };
+
+            // --- Save full content to file if requested ---
+            if let Some(ref path) = save_to_file {
+                tokio::fs::write(path, processed.as_bytes())
+                    .await
+                    .map_err(|e| ToolError::Other {
+                        message: format!("failed to write to file '{}': {}", path, e),
+                    })?;
+
+                return Ok(ToolResult {
+                    success: true,
+                    output: Some(json!({
+                        "url": url,
+                        "content_type": content_type,
+                        "total_bytes": total_bytes,
+                        "saved_to": path,
+                        "truncated": false,
+                    })),
+                    error: None,
+                });
+            }
+
+            // --- Apply offset + limit ---
+            let sliced = slice_text(&processed, offset, limit);
+            let truncated = (offset + limit) < processed.len();
 
             Ok(ToolResult {
                 success: true,
-                output: Some(json!(text)),
+                output: Some(json!({
+                    "url": url,
+                    "content": sliced,
+                    "content_type": content_type,
+                    "truncated": truncated,
+                    "total_bytes": total_bytes,
+                })),
                 error: None,
             })
         })

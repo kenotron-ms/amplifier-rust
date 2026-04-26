@@ -93,6 +93,9 @@ pub struct SpawnResult {
     pub response: String,
     /// The session ID used for this run (enables future resume calls).
     pub session_id: String,
+    /// Number of LLM turns taken during the run. Defaults to 1 until the
+    /// orchestrator's SubagentRunner::run() tracks steps explicitly.
+    pub turn_count: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +161,7 @@ impl TaskTool {
 
 impl Tool for TaskTool {
     fn name(&self) -> &str {
-        "spawn_agent"
+        "_spawn_agent"
     }
 
     fn description(&self) -> &str {
@@ -205,7 +208,7 @@ impl Tool for TaskTool {
         parameters.insert("required".to_string(), json!(["instruction"]));
 
         ToolSpec {
-            name: "spawn_agent".to_string(),
+            name: "_spawn_agent".to_string(),
             parameters,
             description: Some(
                 "Spawn a specialized sub-agent to handle a task autonomously".to_string(),
@@ -357,7 +360,7 @@ mod tests {
 
     // --- Test 2: get_spec_name_is_spawn_agent ---
 
-    /// The tool spec must advertise the name 'spawn_agent'.
+    /// The tool spec must advertise the name '_spawn_agent' (underscore prefix = hidden from LLMs).
     #[test]
     fn get_spec_name_is_spawn_agent() {
         let runner = Arc::new(SuccessRunner {
@@ -365,7 +368,7 @@ mod tests {
         });
         let tool = TaskTool::new(runner, 5, 0);
         let spec = tool.get_spec();
-        assert_eq!(spec.name, "spawn_agent");
+        assert_eq!(spec.name, "_spawn_agent");
     }
 
     // --- Test 3: execute_returns_runner_output_on_success ---
@@ -487,8 +490,10 @@ mod tests {
         let r = SpawnResult {
             response: "hi".into(),
             session_id: "s".into(),
+            turn_count: 1,
         };
         assert_eq!(r.response, "hi");
         assert_eq!(r.session_id, "s");
+        assert_eq!(r.turn_count, 1);
     }
 }

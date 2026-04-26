@@ -12,7 +12,7 @@ use amplifier_module_tool_bash::{BashConfig, BashTool, SafetyProfile};
 use amplifier_module_tool_filesystem::{
     EditFileTool, FilesystemConfig, GlobTool, GrepTool, ReadFileTool, WriteFileTool,
 };
-use amplifier_module_tool_search::{GrepCodebaseTool, SearchConfig};
+use amplifier_module_tool_search::{GrepTool as SearchGrepTool, GlobTool as SearchGlobTool, SearchConfig};
 use amplifier_module_tool_todo::TodoTool;
 use amplifier_module_tool_web::fetch::FetchUrlTool;
 
@@ -70,7 +70,7 @@ pub fn build_registry(vault: &Path) -> anyhow::Result<ToolMap> {
     tools.insert("web_fetch".to_string(), Box::new(FetchUrlTool::new()));
     tools.insert(
         "grep_codebase".to_string(),
-        Box::new(GrepCodebaseTool::new(search_config)),
+        Box::new(SearchGrepTool::new(search_config)),
     );
     tools.insert("todo".to_string(), Box::new(TodoTool::default()));
 

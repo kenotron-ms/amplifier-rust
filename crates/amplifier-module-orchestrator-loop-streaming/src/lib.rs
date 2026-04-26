@@ -152,7 +152,7 @@ impl LoopOrchestrator {
             .execute(instruction, &mut ctx, &hooks, |_| {})
             .await?;
 
-        Ok(amplifier_module_tool_task::SpawnResult {
+        Ok(amplifier_module_tool_task::SpawnResult { turn_count: 1,
             response,
             session_id: session_id.to_string(),
         })

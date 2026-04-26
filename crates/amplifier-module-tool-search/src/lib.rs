@@ -1,20 +1,24 @@
-//! Codebase search tool for the Amplifier agent framework.
+//! Codebase search tools for the Amplifier agent framework.
 //!
-//! This crate provides [`GrepCodebaseTool`], which implements the
-//! `amplifier_core::traits::Tool` interface for searching file contents with
-//! a regex pattern.
+//! This crate provides two tools:
 //!
-//! # Search backends
+//! - [`GrepTool`] — search file contents with a regex pattern, using ripgrep
+//!   (`rg`) when available with a pure-Rust `walkdir`+`regex` fallback.
+//! - [`GlobTool`] — find files/directories matching a glob pattern.
 //!
-//! 1. **ripgrep** (`rg`) — fast subprocess-based search using the system `rg`
-//!    binary. Parses NDJSON output (`rg --json`).
-//! 2. **Pure-Rust fallback** — `walkdir` + `regex` on a blocking thread pool,
-//!    used automatically when `rg` is not available.
+//! # Output modes (GrepTool)
 //!
-//! Both backends produce a JSON array of `{file, line, content}` objects.
+//! | `output_mode`        | Result shape                       |
+//! |----------------------|------------------------------------|
+//! | `files_with_matches` | `["path/to/file", ...]` (default)  |
+//! | `content`            | `[{file, line, content}, ...]`     |
+//! | `count`              | `[{file, count}, ...]`             |
 
 /// ripgrep-based search backend.
 pub mod ripgrep;
+
+/// Glob file-finder tool.
+pub mod glob;
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -28,45 +32,48 @@ use amplifier_core::models::ToolResult;
 use amplifier_core::traits::Tool;
 use serde_json::{json, Value};
 
+pub use glob::GlobTool;
+
 // ---------------------------------------------------------------------------
 // SearchConfig
 // ---------------------------------------------------------------------------
 
-/// Configuration for [`GrepCodebaseTool`].
+/// Shared configuration for search tools.
 #[derive(Debug, Clone)]
 pub struct SearchConfig {
     /// Base directory for relative path resolution.
     pub base_path: PathBuf,
-    /// Maximum number of search results to return.
+    /// Default maximum number of results to return.
     pub max_results: usize,
 }
 
 impl SearchConfig {
     /// Create a new [`SearchConfig`] with the given base path.
     ///
-    /// Defaults to `max_results = 200`.
+    /// Defaults to `max_results = 500`.
     pub fn new(base_path: PathBuf) -> Arc<Self> {
         Arc::new(Self {
             base_path,
-            max_results: 200,
+            max_results: 500,
         })
     }
 }
 
 // ---------------------------------------------------------------------------
-// GrepCodebaseTool
+// GrepTool
 // ---------------------------------------------------------------------------
 
 /// Tool for searching file contents with a regex pattern.
 ///
 /// Uses ripgrep (`rg`) when available, with a pure-Rust `walkdir`+`regex`
-/// fallback. Returns a JSON array of `{file, line, content}` objects.
-pub struct GrepCodebaseTool {
+/// fallback. Supports multiple output modes, context lines, file-type
+/// filters, case-insensitive search, and multiline patterns.
+pub struct GrepTool {
     config: Arc<SearchConfig>,
 }
 
-impl GrepCodebaseTool {
-    /// Create a new [`GrepCodebaseTool`] with the given configuration.
+impl GrepTool {
+    /// Create a new [`GrepTool`] with the given configuration.
     pub fn new(config: Arc<SearchConfig>) -> Self {
         Self { config }
     }
@@ -105,14 +112,86 @@ async fn execute_grep(config: Arc<SearchConfig>, input: Value) -> Result<ToolRes
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    // Optional: max_results override
-    let max_results = input
-        .get("max_results")
+    // head_limit — accept either "head_limit" (primary) or legacy "max_results"
+    let head_limit = input
+        .get("head_limit")
         .and_then(|v| v.as_u64())
         .map(|n| n as usize)
         .unwrap_or(config.max_results);
 
-    let results = ripgrep::grep(&pattern, &search_path, glob_filter.as_deref(), max_results)
+    // offset — number of leading results to skip
+    let offset = input
+        .get("offset")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as usize)
+        .unwrap_or(0);
+
+    // Case insensitive: accept both "-i" and "case_insensitive"
+    let case_insensitive = input
+        .get("-i")
+        .and_then(|v| v.as_bool())
+        .or_else(|| input.get("case_insensitive").and_then(|v| v.as_bool()))
+        .unwrap_or(false);
+
+    // Context flags: -C overrides -A / -B when both are absent
+    let ctx_both = input
+        .get("-C")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as usize);
+    let context_after = input
+        .get("-A")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as usize)
+        .or(ctx_both)
+        .unwrap_or(0);
+    let context_before = input
+        .get("-B")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as usize)
+        .or(ctx_both)
+        .unwrap_or(0);
+
+    // output_mode — default: files_with_matches
+    let output_mode = match input.get("output_mode").and_then(|v| v.as_str()) {
+        Some("content") => ripgrep::OutputMode::Content,
+        Some("count") => ripgrep::OutputMode::Count,
+        _ => ripgrep::OutputMode::FilesWithMatches,
+    };
+
+    // include_ignored — pass --no-ignore to rg
+    let include_ignored = input
+        .get("include_ignored")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // type — rg --type filter (e.g. "py", "rs", "ts")
+    let file_type = input
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    // multiline — rg -U --multiline-dotall
+    let multiline = input
+        .get("multiline")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let params = ripgrep::GrepParams {
+        pattern,
+        path: search_path,
+        glob_filter,
+        head_limit,
+        offset,
+        case_insensitive,
+        context_before,
+        context_after,
+        output_mode,
+        include_ignored,
+        file_type,
+        multiline,
+    };
+
+    let results = ripgrep::grep(&params)
         .await
         .map_err(|e| ToolError::Other { message: e })?;
 
@@ -131,15 +210,16 @@ async fn execute_grep(config: Arc<SearchConfig>, input: Value) -> Result<ToolRes
 // Tool impl
 // ---------------------------------------------------------------------------
 
-impl Tool for GrepCodebaseTool {
+impl Tool for GrepTool {
     fn name(&self) -> &str {
-        "grep_codebase"
+        "grep"
     }
 
     fn description(&self) -> &str {
         "Search file contents using a regex pattern. Uses ripgrep (rg) when \
-         available, with a pure-Rust walkdir+regex fallback. Returns a JSON \
-         array of {file, line, content} objects."
+         available, with a pure-Rust walkdir+regex fallback. Supports multiple \
+         output modes, context lines, file-type filters, case-insensitive \
+         search, multiline patterns, and result pagination."
     }
 
     fn get_spec(&self) -> ToolSpec {
@@ -149,7 +229,7 @@ impl Tool for GrepCodebaseTool {
             "pattern".to_string(),
             json!({
                 "type": "string",
-                "description": "Regex pattern to search for in file contents"
+                "description": "The regular expression pattern to search for in file contents"
             }),
         );
 
@@ -157,7 +237,7 @@ impl Tool for GrepCodebaseTool {
             "path".to_string(),
             json!({
                 "type": "string",
-                "description": "Absolute path or path relative to the base_path to search within"
+                "description": "File or directory to search in (rg PATH). Defaults to the workspace root."
             }),
         );
 
@@ -165,15 +245,90 @@ impl Tool for GrepCodebaseTool {
             "glob".to_string(),
             json!({
                 "type": "string",
-                "description": "Optional filename glob filter (e.g. '*.rs') to restrict which files are searched"
+                "description": "Glob pattern to filter files (e.g. '*.rs', '**/*.tsx') — maps to rg --glob"
             }),
         );
 
         properties.insert(
-            "max_results".to_string(),
+            "output_mode".to_string(),
+            json!({
+                "type": "string",
+                "enum": ["files_with_matches", "content", "count"],
+                "description": "Output mode: 'files_with_matches' (default) returns file paths, \
+                                'content' returns {file, line, content} for each matching line, \
+                                'count' returns {file, count} per matching file"
+            }),
+        );
+
+        properties.insert(
+            "-i".to_string(),
+            json!({
+                "type": "boolean",
+                "description": "Case insensitive search (rg -i)"
+            }),
+        );
+
+        properties.insert(
+            "-A".to_string(),
             json!({
                 "type": "integer",
-                "description": "Maximum number of results to return (default: 200)"
+                "description": "Number of lines to show after each match (rg -A). Requires output_mode: 'content'."
+            }),
+        );
+
+        properties.insert(
+            "-B".to_string(),
+            json!({
+                "type": "integer",
+                "description": "Number of lines to show before each match (rg -B). Requires output_mode: 'content'."
+            }),
+        );
+
+        properties.insert(
+            "-C".to_string(),
+            json!({
+                "type": "integer",
+                "description": "Lines of context before and after each match (rg -C). Overrides -A and -B. Requires output_mode: 'content'."
+            }),
+        );
+
+        properties.insert(
+            "head_limit".to_string(),
+            json!({
+                "type": "integer",
+                "description": "Limit output to first N entries (default: 500)"
+            }),
+        );
+
+        properties.insert(
+            "offset".to_string(),
+            json!({
+                "type": "integer",
+                "description": "Skip first N entries before applying head_limit (default: 0)"
+            }),
+        );
+
+        properties.insert(
+            "include_ignored".to_string(),
+            json!({
+                "type": "boolean",
+                "description": "Search in normally-excluded directories (hidden files, .gitignore). Maps to rg --no-ignore. Default: false."
+            }),
+        );
+
+        properties.insert(
+            "type".to_string(),
+            json!({
+                "type": "string",
+                "description": "File type to search (rg --type). Valid types: py, js, ts, go, rust, java, c, cpp, rb, sh, md, json, yaml, html, css, xml, php, sql, swift, lua, toml, txt."
+            }),
+        );
+
+        properties.insert(
+            "multiline".to_string(),
+            json!({
+                "type": "boolean",
+                "description": "Enable multiline mode where '.' matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false."
             }),
         );
 
@@ -183,11 +338,13 @@ impl Tool for GrepCodebaseTool {
         parameters.insert("required".to_string(), json!(["pattern"]));
 
         ToolSpec {
-            name: "grep_codebase".to_string(),
+            name: "grep".to_string(),
             parameters,
             description: Some(
                 "Search file contents using a regex pattern. Uses ripgrep with \
-                 pure-Rust fallback. Returns JSON array of {file, line, content}."
+                 pure-Rust fallback. Output modes: files_with_matches (default), \
+                 content, count. Supports -i, -A, -B, -C, type, multiline, \
+                 include_ignored, head_limit, offset."
                     .to_string(),
             ),
             extensions: HashMap::new(),

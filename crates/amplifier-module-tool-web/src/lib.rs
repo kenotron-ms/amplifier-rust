@@ -1,8 +1,8 @@
 //! Web tools for the Amplifier agent framework.
 //!
-//! Provides [`WebToolSuite`] which exposes `fetch_url` and `search_web` tools.
+//! Provides [`WebToolSuite`] which exposes `web_fetch` and `search_web` tools.
 
-/// HTTP URL fetch tool (`fetch_url`).
+/// HTTP URL fetch tool (`web_fetch`).
 pub mod fetch;
 /// Web search tool (`search_web`).
 pub mod search;
@@ -22,7 +22,7 @@ impl WebToolSuite {
     pub fn tools() -> Vec<(String, Arc<dyn Tool>)> {
         vec![
             (
-                "fetch_url".to_string(),
+                "web_fetch".to_string(),
                 Arc::new(FetchUrlTool::new()) as Arc<dyn Tool>,
             ),
             (
