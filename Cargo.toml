@@ -20,6 +20,7 @@ members = [
     "crates/amplifier-module-session-store",
     "crates/amplifier-module-hooks-routing",
     "crates/amplifier-context-foundation",
+    "crates/amplifier-module-hooks-status-context",
 ]
 
 [workspace.package]

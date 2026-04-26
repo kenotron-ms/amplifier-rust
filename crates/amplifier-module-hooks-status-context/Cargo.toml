@@ -1,0 +1,12 @@
+    [package]
+    name = "amplifier-module-hooks-status-context"
+    version = "0.1.0"
+    edition = "2021"
+    description = "Status-context hook — injects env, platform, date, and git status before each prompt. Mirrors Python hooks-status-context."
+
+    [dependencies]
+    amplifier-module-orchestrator-loop-streaming = { path = "../amplifier-module-orchestrator-loop-streaming" }
+    async-trait = { workspace = true }
+    chrono = { version = "0.4", features = ["clock"] }
+    uuid = { version = "1", features = ["v4"] }
+    

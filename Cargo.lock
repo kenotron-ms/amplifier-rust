@@ -118,6 +118,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "amplifier-module-hooks-status-context"
+version = "0.1.0"
+dependencies = [
+ "amplifier-module-orchestrator-loop-streaming",
+ "async-trait",
+ "chrono",
+ "uuid",
+]
+
+[[package]]
 name = "amplifier-module-orchestrator-loop-streaming"
 version = "0.1.0"
 dependencies = [
