@@ -96,6 +96,8 @@ pub struct SpawnResult {
     /// Number of LLM turns taken during the run. Defaults to 1 until the
     /// orchestrator's SubagentRunner::run() tracks steps explicitly.
     pub turn_count: usize,
+    /// Names of every tool the sub-agent invoked during this run, in order.
+    pub tools_called: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +110,7 @@ pub struct SpawnResult {
 #[async_trait::async_trait]
 pub trait SubagentRunner: Send + Sync {
     /// Run a sub-agent with the given request.
-    async fn run(&self, req: SpawnRequest) -> anyhow::Result<String>;
+    async fn run(&self, req: SpawnRequest) -> anyhow::Result<SpawnResult>;
 
     /// Resume an existing session by `session_id`, appending `instruction`
     /// as the next user turn.
@@ -282,7 +284,7 @@ impl Tool for TaskTool {
             match self.runner.run(req).await {
                 Ok(result) => Ok(ToolResult {
                     success: true,
-                    output: Some(Value::String(result)),
+                    output: Some(Value::String(result.response)),
                     error: None,
                 }),
                 Err(e) => Err(ToolError::ExecutionFailed {
@@ -313,8 +315,13 @@ mod tests {
 
     #[async_trait::async_trait]
     impl SubagentRunner for SuccessRunner {
-        async fn run(&self, _req: SpawnRequest) -> anyhow::Result<String> {
-            Ok(self.response.clone())
+        async fn run(&self, _req: SpawnRequest) -> anyhow::Result<SpawnResult> {
+            Ok(SpawnResult {
+                response: self.response.clone(),
+                session_id: String::new(),
+                turn_count: 1,
+                tools_called: vec![],
+            })
         }
     }
 
@@ -322,7 +329,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl SubagentRunner for FailRunner {
-        async fn run(&self, _req: SpawnRequest) -> anyhow::Result<String> {
+        async fn run(&self, _req: SpawnRequest) -> anyhow::Result<SpawnResult> {
             Err(anyhow::anyhow!("runner failed"))
         }
     }
@@ -334,9 +341,14 @@ mod tests {
 
     #[async_trait::async_trait]
     impl SubagentRunner for CapturingRunner {
-        async fn run(&self, req: SpawnRequest) -> anyhow::Result<String> {
+        async fn run(&self, req: SpawnRequest) -> anyhow::Result<SpawnResult> {
             *self.captured.lock().unwrap() = Some(req);
-            Ok("captured".to_string())
+            Ok(SpawnResult {
+                response: "captured".to_string(),
+                session_id: String::new(),
+                turn_count: 1,
+                tools_called: vec![],
+            })
         }
     }
 
@@ -491,9 +503,11 @@ mod tests {
             response: "hi".into(),
             session_id: "s".into(),
             turn_count: 1,
+            tools_called: vec!["bash".into(), "read_file".into()],
         };
         assert_eq!(r.response, "hi");
         assert_eq!(r.session_id, "s");
         assert_eq!(r.turn_count, 1);
+        assert_eq!(r.tools_called, vec!["bash", "read_file"]);
     }
 }

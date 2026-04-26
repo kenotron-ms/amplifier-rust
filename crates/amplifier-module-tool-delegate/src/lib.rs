@@ -319,7 +319,7 @@ session — it remembers prior context and tool results from the previous call."
             // Resolve agent system prompt from registry if available.
             let agent_system_prompt = registry.get(&agent).map(|c| c.instruction.clone());
 
-            let (response_text, used_session_id, turn_count): (String, String, usize) = if let Some(sid) = session_id
+            let (response_text, used_session_id, turn_count, tools_called): (String, String, usize, Vec<String>) = if let Some(sid) = session_id
             {
                 // Resume path — requires an attached store.
                 let store = store.as_ref().ok_or_else(|| ToolError::Other {
@@ -351,7 +351,7 @@ session — it remembers prior context and tool results from the previous call."
                         stdout: None, stderr: None, exit_code: None,
                     })?
                 };
-                (spawn_result.response, spawn_result.session_id, spawn_result.turn_count)
+                (spawn_result.response, spawn_result.session_id, spawn_result.turn_count, spawn_result.tools_called)
             } else {
                 // Normal run path.
                 let req = SpawnRequest {
@@ -365,7 +365,7 @@ session — it remembers prior context and tool results from the previous call."
                 };
                 log::info!("[delegate] calling runner.run() for agent=\"{}\"", agent);
                 let run_fut = runner.run(req);
-                let response = if let Some(dur) = config_timeout {
+                let spawn_result = if let Some(dur) = config_timeout {
                     tokio::time::timeout(dur, run_fut)
                         .await
                         .map_err(|_| ToolError::Other {
@@ -385,17 +385,18 @@ session — it remembers prior context and tool results from the previous call."
                         stdout: None, stderr: None, exit_code: None,
                     })?
                 };
-                (response, String::new(), 1)
+                (spawn_result.response, spawn_result.session_id, spawn_result.turn_count, spawn_result.tools_called)
             };
 
             // Return rich JSON result matching Python reference format:
-            // { response, agent, status, turn_count, session_id }
+            // { response, agent, status, turn_count, session_id, tools_called }
             let json_result = serde_json::json!({
                 "response": response_text,
                 "agent": agent,
                 "status": "success",
                 "turn_count": turn_count,
                 "session_id": used_session_id,
+                "tools_called": tools_called,
             });
 
             Ok(ToolResult {
@@ -421,8 +422,13 @@ mod tests {
 
     #[async_trait::async_trait]
     impl SubagentRunner for NopRunner {
-        async fn run(&self, _req: SpawnRequest) -> anyhow::Result<String> {
-            Ok("nop".to_string())
+        async fn run(&self, _req: SpawnRequest) -> anyhow::Result<amplifier_module_tool_task::SpawnResult> {
+            Ok(amplifier_module_tool_task::SpawnResult {
+                response: "nop".to_string(),
+                session_id: String::new(),
+                turn_count: 1,
+                tools_called: vec![],
+            })
         }
     }
 
@@ -545,13 +551,13 @@ mod tests {
         struct ResumeRecorder { called: Arc<StdMutex<Option<String>>> }
         #[async_trait::async_trait]
         impl SubagentRunner for ResumeRecorder {
-            async fn run(&self, _req: SpawnRequest) -> anyhow::Result<String> {
+            async fn run(&self, _req: SpawnRequest) -> anyhow::Result<SpawnResult> {
                 *self.called.lock().unwrap() = Some("run".into());
-                Ok("from run".into())
+                Ok(SpawnResult { response: "from run".into(), session_id: String::new(), turn_count: 1, tools_called: vec![] })
             }
             async fn resume(&self, session_id: &str, _instruction: String) -> anyhow::Result<SpawnResult> {
                 *self.called.lock().unwrap() = Some(format!("resume:{session_id}"));
-                Ok(SpawnResult { response: "from resume".into(), session_id: session_id.into(), turn_count: 1 })
+                Ok(SpawnResult { response: "from resume".into(), session_id: session_id.into(), turn_count: 1, tools_called: vec![] })
             }
         }
 

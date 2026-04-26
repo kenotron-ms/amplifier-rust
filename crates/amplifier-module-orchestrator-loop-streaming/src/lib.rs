@@ -21,6 +21,40 @@ use amplifier_module_session_store::{SessionEvent, SessionStore};
 use amplifier_module_tool_task::{SpawnRequest, SubagentRunner};
 
 // ---------------------------------------------------------------------------
+// ToolTrackerHook
+// ---------------------------------------------------------------------------
+
+/// Lightweight hook that accumulates names of every tool the sub-agent calls.
+struct ToolTrackerHook {
+    names: std::sync::Mutex<Vec<String>>,
+}
+
+impl ToolTrackerHook {
+    fn new() -> Self {
+        Self { names: std::sync::Mutex::new(vec![]) }
+    }
+    fn get(&self) -> Vec<String> {
+        self.names.lock().unwrap().clone()
+    }
+}
+
+// Implement Hook for Arc<ToolTrackerHook> so the Arc can be both registered
+// with the HookRegistry (which owns it via Box<dyn Hook>) and retained by the
+// caller for reading accumulated names after execution.
+#[async_trait::async_trait]
+impl Hook for std::sync::Arc<ToolTrackerHook> {
+    fn events(&self) -> &[HookEvent] {
+        &[HookEvent::ToolPre]
+    }
+    async fn handle(&self, ctx: &HookContext) -> HookResult {
+        if let Some(name) = ctx.data.get("name").and_then(|v| v.as_str()) {
+            self.names.lock().unwrap().push(name.to_string());
+        }
+        HookResult::Continue
+    }
+}
+
+// ---------------------------------------------------------------------------
 // LoopConfig
 // ---------------------------------------------------------------------------
 
@@ -152,9 +186,11 @@ impl LoopOrchestrator {
             .execute(instruction, &mut ctx, &hooks, |_| {})
             .await?;
 
-        Ok(amplifier_module_tool_task::SpawnResult { turn_count: 1,
+        Ok(amplifier_module_tool_task::SpawnResult {
+            turn_count: 1,
             response,
             session_id: session_id.to_string(),
+            tools_called: vec![],
         })
     }
 
@@ -487,7 +523,7 @@ impl SubagentRunner for LoopOrchestrator {
         LoopOrchestrator::resume(self, session_id, instruction).await
     }
 
-    async fn run(&self, req: SpawnRequest) -> anyhow::Result<String> {
+    async fn run(&self, req: SpawnRequest) -> anyhow::Result<amplifier_module_tool_task::SpawnResult> {
         if req.agent_system_prompt.is_some() || !req.tool_filter.is_empty() {
             // Build a child orchestrator with overridden config.
             // Sub-agents run until they have an answer — do NOT inherit max_steps from the
@@ -521,22 +557,41 @@ impl SubagentRunner for LoopOrchestrator {
             log::info!("[subagent] child will have {} tools (excluded: {:?})", filtered.len(), req.tool_filter);
             *child.tools.write().await = filtered;
 
-            // Execute with child orchestrator
+            // Execute with child orchestrator, tracking every tool call.
             let mut ctx = SimpleContext::new(req.context);
-            let hooks = HookRegistry::new();
+            let mut hooks = HookRegistry::new();
+            let tracker = std::sync::Arc::new(ToolTrackerHook::new());
+            hooks.register(Box::new(std::sync::Arc::clone(&tracker)));
             let instr_preview = req.instruction.chars().take(60).collect::<String>();
             log::info!("[subagent] calling child.execute() instruction=\"{}…\"", instr_preview);
             let result = child
                 .execute(req.instruction, &mut ctx, &hooks, |_| {})
                 .await;
             log::info!("[subagent] child.execute() returned ok={}", result.is_ok());
-            result
+            let tools_called = tracker.get();
+            Ok(amplifier_module_tool_task::SpawnResult {
+                response: result?,
+                session_id: String::new(),
+                turn_count: 1,
+                tools_called,
+            })
         } else {
-            // Fall through to self.execute (no customisation needed)
+            // Fall through to self.execute (no customisation needed).
+            // Still track tool calls for consistent reporting.
             let mut ctx = SimpleContext::new(req.context);
-            let hooks = HookRegistry::new();
-            self.execute(req.instruction, &mut ctx, &hooks, |_| {})
-                .await
+            let mut hooks = HookRegistry::new();
+            let tracker = std::sync::Arc::new(ToolTrackerHook::new());
+            hooks.register(Box::new(std::sync::Arc::clone(&tracker)));
+            let result = self
+                .execute(req.instruction, &mut ctx, &hooks, |_| {})
+                .await;
+            let tools_called = tracker.get();
+            Ok(amplifier_module_tool_task::SpawnResult {
+                response: result?,
+                session_id: String::new(),
+                turn_count: 1,
+                tools_called,
+            })
         }
     }
 }

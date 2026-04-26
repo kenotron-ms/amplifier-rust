@@ -206,12 +206,12 @@ impl SkillEngine {
                     tool_filter: vec![],
                 };
 
-                let result = runner.run(req).await?;
+                let spawn_result = runner.run(req).await?;
 
                 Ok(json!({
                     "skill_name": skill_name,
                     "context": "fork",
-                    "result": result,
+                    "result": spawn_result.response,
                 }))
             }
         }
@@ -414,8 +414,13 @@ Analyze this codebase deeply and report findings.
 
     #[async_trait::async_trait]
     impl SubagentRunner for MockRunner {
-        async fn run(&self, _req: SpawnRequest) -> anyhow::Result<String> {
-            Ok(self.response.clone())
+        async fn run(&self, _req: SpawnRequest) -> anyhow::Result<amplifier_module_tool_task::SpawnResult> {
+            Ok(amplifier_module_tool_task::SpawnResult {
+                response: self.response.clone(),
+                session_id: String::new(),
+                turn_count: 1,
+                tools_called: vec![],
+            })
         }
     }
 
