@@ -246,11 +246,23 @@ pub(crate) fn content_block_to_anthropic(block: &ContentBlock) -> Value {
             output,
             ..
         } => {
-            // Anthropic requires tool_result content to be a string or a list of
-            // content blocks — NEVER a bare JSON object.  JSON-serialize anything
-            // that isn't already a string or array so the API never rejects us.
+            // Anthropic tool_result content must be:
+            //   (a) a plain string, OR
+            //   (b) an array where every item has a "type" field (content blocks)
+            //
+            // Raw objects, untyped arrays, and anything else must be JSON-serialised
+            // to a string first. This covers:
+            //   - SkillEngine returning {skill_name, context, body} objects
+            //   - Any other tool returning Value::Object
+            //   - Arrays that came from re-parsing context history without type fields
             let content = match output {
-                Value::String(_) | Value::Array(_) => output.clone(),
+                Value::String(_) => output.clone(),
+                Value::Array(ref arr)
+                    if arr.iter().all(|v| v.get("type").is_some()) =>
+                {
+                    // Properly typed content-block array — pass through as-is
+                    output.clone()
+                }
                 other => Value::String(
                     serde_json::to_string(other).unwrap_or_default()
                 ),
