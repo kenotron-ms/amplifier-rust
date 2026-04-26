@@ -245,11 +245,22 @@ pub(crate) fn content_block_to_anthropic(block: &ContentBlock) -> Value {
             tool_call_id,
             output,
             ..
-        } => json!({
-            "type": "tool_result",
-            "tool_use_id": tool_call_id,
-            "content": output,
-        }),
+        } => {
+            // Anthropic requires tool_result content to be a string or a list of
+            // content blocks — NEVER a bare JSON object.  JSON-serialize anything
+            // that isn't already a string or array so the API never rejects us.
+            let content = match output {
+                Value::String(_) | Value::Array(_) => output.clone(),
+                other => Value::String(
+                    serde_json::to_string(other).unwrap_or_default()
+                ),
+            };
+            json!({
+                "type": "tool_result",
+                "tool_use_id": tool_call_id,
+                "content": content,
+            })
+        }
         ContentBlock::Text { .. } | ContentBlock::Thinking { .. } | ContentBlock::Image { .. } => {
             serde_json::to_value(block).unwrap_or(Value::Null)
         }
@@ -293,6 +304,27 @@ pub(crate) fn parse_content_blocks(blocks: &[Value]) -> Vec<ContentBlock> {
                         id,
                         name,
                         input,
+                        visibility: None,
+                        extensions: HashMap::new(),
+                    })
+                }
+                // Regular tool results from the orchestrator — support both field-name
+                // conventions ("tool_use_id" for Anthropic format, "tool_call_id" for our
+                // internal format) and both content field names ("content" / "output").
+                "tool_result" => {
+                    let tool_call_id = block
+                        .get("tool_use_id")
+                        .or_else(|| block.get("tool_call_id"))
+                        .and_then(|v| v.as_str())
+                        .map(String::from)?;
+                    let output = block
+                        .get("content")
+                        .or_else(|| block.get("output"))
+                        .cloned()
+                        .unwrap_or(Value::Null);
+                    Some(ContentBlock::ToolResult {
+                        tool_call_id,
+                        output,
                         visibility: None,
                         extensions: HashMap::new(),
                     })
