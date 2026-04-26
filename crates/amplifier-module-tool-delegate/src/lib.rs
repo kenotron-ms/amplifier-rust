@@ -363,6 +363,7 @@ session — it remembers prior context and tool results from the previous call."
                     agent_system_prompt,
                     tool_filter: config_exclude_tools,
                 };
+                log::info!("[delegate] calling runner.run() for agent=\"{}\"", agent);
                 let run_fut = runner.run(req);
                 let response = if let Some(dur) = config_timeout {
                     tokio::time::timeout(dur, run_fut)

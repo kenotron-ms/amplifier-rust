@@ -508,22 +508,29 @@ impl SubagentRunner for LoopOrchestrator {
 
             // Share tools, filtered by tool_filter if non-empty
             let tools = self.snapshot_tools().await;
+            // tool_filter is a DENYLIST — exclude these tools from the child session.
+            // (Matches Python: exclude_tools removes named tools from child.)
             let filtered: HashMap<String, Arc<dyn Tool>> = if req.tool_filter.is_empty() {
                 tools
             } else {
                 tools
                     .into_iter()
-                    .filter(|(k, _)| req.tool_filter.contains(k))
+                    .filter(|(k, _)| !req.tool_filter.contains(k))
                     .collect()
             };
+            log::info!("[subagent] child will have {} tools (excluded: {:?})", filtered.len(), req.tool_filter);
             *child.tools.write().await = filtered;
 
             // Execute with child orchestrator
             let mut ctx = SimpleContext::new(req.context);
             let hooks = HookRegistry::new();
-            child
+            let instr_preview = req.instruction.chars().take(60).collect::<String>();
+            log::info!("[subagent] calling child.execute() instruction=\"{}…\"", instr_preview);
+            let result = child
                 .execute(req.instruction, &mut ctx, &hooks, |_| {})
-                .await
+                .await;
+            log::info!("[subagent] child.execute() returned ok={}", result.is_ok());
+            result
         } else {
             // Fall through to self.execute (no customisation needed)
             let mut ctx = SimpleContext::new(req.context);
