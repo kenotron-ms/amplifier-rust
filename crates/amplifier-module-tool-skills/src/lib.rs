@@ -31,9 +31,13 @@ use crate::parser::{parse_skill_md, ParsedSkill, SkillContext};
 ///
 /// 1. `<vault_path>/skills/`
 /// 2. `$HOME/.amplifier/skills/`
+/// 3. Bundled skills registered via [`with_bundled`] (lowest priority — filesystem wins)
 pub struct SkillEngine {
     search_paths: Vec<PathBuf>,
     runner: Option<Arc<dyn SubagentRunner>>,
+    /// Skills bundled at compile time — always available regardless of the filesystem.
+    /// Lowest priority: a filesystem skill with the same name takes precedence.
+    bundled: HashMap<String, String>,
 }
 
 impl SkillEngine {
@@ -56,6 +60,7 @@ impl SkillEngine {
         Self {
             search_paths,
             runner: None,
+            bundled: HashMap::new(),
         }
     }
 
@@ -65,11 +70,32 @@ impl SkillEngine {
         self
     }
 
-    /// Discover all skills across all configured search paths.
+    /// Register skills bundled at compile time (e.g. via `include_str!`).
+    ///
+    /// Bundled skills have the **lowest priority** — if a skill with the same name
+    /// is found on the filesystem, the filesystem version wins.  Calling this method
+    /// multiple times is safe: the first registration for a given name is kept.
+    ///
+    /// This is primarily used on platforms where `~/.amplifier/skills/` may not
+    /// exist (e.g. Android) to ensure the superpowers skill set is always available.
+    pub fn with_bundled(mut self, skills: &[(&str, &str)]) -> Self {
+        for (name, content) in skills {
+            self.bundled
+                .entry(name.to_string())
+                .or_insert_with(|| content.to_string());
+        }
+        self
+    }
+
+    /// Discover all skills across all configured search paths plus bundled skills.
     ///
     /// For each search path that is a directory, reads every sub-directory
     /// that contains a `SKILL.md` file and parses it.  Parse errors are
     /// silently ignored.
+    ///
+    /// Bundled skills (registered via [`with_bundled`]) are appended last with
+    /// lowest priority — if a skill name is already present from the filesystem
+    /// scans, the bundled copy is skipped.
     fn discover_skills(&self) -> Vec<ParsedSkill> {
         let mut skills = Vec::new();
 
@@ -103,6 +129,25 @@ impl SkillEngine {
                 parsed.frontmatter.directory = entry.path();
                 skills.push(parsed);
             }
+        }
+
+        // Collect names already discovered from the filesystem (highest priority).
+        let seen_names: std::collections::HashSet<String> =
+            skills.iter().map(|s| s.frontmatter.name.clone()).collect();
+
+        // Append bundled skills — lowest priority, skipped on name collision.
+        for (bundle_key, content) in &self.bundled {
+            let mut parsed = match parse_skill_md(content) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            if seen_names.contains(&parsed.frontmatter.name) {
+                continue;
+            }
+            // Synthetic directory path: no real on-disk location.
+            parsed.frontmatter.directory =
+                PathBuf::from(format!("bundled:{}", bundle_key));
+            skills.push(parsed);
         }
 
         skills
@@ -362,6 +407,7 @@ mod tests {
             Self {
                 search_paths: vec![vault_path.join("skills")],
                 runner: None,
+                bundled: HashMap::new(),
             }
         }
     }
@@ -403,6 +449,16 @@ context: fork
 user_invocable: false
 ---
 Analyze this codebase deeply and report findings.
+";
+
+    const BUNDLED_SKILL: &str = "\
+---
+name: bundled-helper
+description: A bundled skill always available at runtime
+context: inject
+user_invocable: false
+---
+This skill is bundled at compile time.
 ";
 
     // --- Mock runner ---
@@ -640,6 +696,91 @@ Analyze this codebase deeply and report findings.
         assert!(
             msg.contains("runner") || msg.contains("fork"),
             "error should mention runner or fork requirement, got: {msg}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 10: with_bundled registers skills available at load time
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn with_bundled_skills_appear_in_list() {
+        // No filesystem skills — only bundled.
+        let engine = SkillEngine::new_isolated("/this/path/does/not/exist/99999")
+            .with_bundled(&[("bundled-helper", BUNDLED_SKILL)]);
+
+        let result = engine.handle_list();
+        let arr = result.as_array().expect("expected JSON array");
+        assert_eq!(arr.len(), 1, "expected 1 bundled skill, got: {arr:?}");
+        assert_eq!(arr[0]["name"], "bundled-helper");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 11: filesystem skill wins over bundled skill on name collision
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn filesystem_skill_wins_over_bundled_on_collision() {
+        let tmp = TempDir::new().unwrap();
+        // Write a filesystem skill named "bundled-helper" with different content.
+        let fs_skill = "\
+---
+name: bundled-helper
+description: Filesystem version wins
+context: inject
+user_invocable: true
+---
+This is the filesystem version.
+";
+        make_temp_skill(&tmp, "bundled-helper", fs_skill);
+
+        let engine = SkillEngine::new_isolated(tmp.path())
+            .with_bundled(&[("bundled-helper", BUNDLED_SKILL)]);
+
+        let result = engine.handle_list();
+        let arr = result.as_array().expect("expected JSON array");
+        assert_eq!(arr.len(), 1, "should have exactly 1 skill (no duplicates)");
+        // The filesystem version has user_invocable: true; bundled has false.
+        assert_eq!(
+            arr[0]["user_invocable"], true,
+            "filesystem version should win over bundled"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 12: with_bundled keeps first registration on repeated calls
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn with_bundled_first_registration_wins() {
+        let first = "\
+---
+name: my-skill
+description: First registration
+context: inject
+user_invocable: true
+---
+First content.
+";
+        let second = "\
+---
+name: my-skill
+description: Second registration
+context: inject
+user_invocable: false
+---
+Second content.
+";
+        let engine = SkillEngine::new_isolated("/this/path/does/not/exist/99999")
+            .with_bundled(&[("my-skill", first)])
+            .with_bundled(&[("my-skill", second)]);
+
+        let result = engine.handle_list();
+        let arr = result.as_array().expect("expected JSON array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(
+            arr[0]["user_invocable"], true,
+            "first registration should win"
         );
     }
 }

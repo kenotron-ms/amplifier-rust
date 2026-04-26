@@ -46,6 +46,24 @@ mod sandbox;
 mod tools;
 
 // ---------------------------------------------------------------------------
+// Bundled skills — compile-time snapshots always available on-device
+// ---------------------------------------------------------------------------
+
+/// Superpowers skills bundled at compile time — always available regardless
+/// of whether ~/.amplifier/skills/ exists (critical for Android).
+const BUNDLED_SKILLS: &[(&str, &str)] = &[
+    ("using-superpowers",              include_str!("../skills/using-superpowers/SKILL.md")),
+    ("brainstorming",                  include_str!("../skills/brainstorming/SKILL.md")),
+    ("systematic-debugging",           include_str!("../skills/systematic-debugging/SKILL.md")),
+    ("test-driven-development",        include_str!("../skills/test-driven-development/SKILL.md")),
+    ("writing-plans",                  include_str!("../skills/writing-plans/SKILL.md")),
+    ("verification-before-completion", include_str!("../skills/verification-before-completion/SKILL.md")),
+    ("dispatching-parallel-agents",    include_str!("../skills/dispatching-parallel-agents/SKILL.md")),
+    ("subagent-driven-development",    include_str!("../skills/subagent-driven-development/SKILL.md")),
+    ("executing-plans",                include_str!("../skills/executing-plans/SKILL.md")),
+];
+
+// ---------------------------------------------------------------------------
 // CLI args
 // ---------------------------------------------------------------------------
 
@@ -199,7 +217,7 @@ async fn main() -> Result<()> {
     // Step 8: wire SkillEngine; ensure the skills directory exists
     let skills_dir = args.vault.join("skills");
     std::fs::create_dir_all(&skills_dir)?;
-    let skills_tool = SkillEngine::new(&args.vault);
+    let skills_tool = SkillEngine::new(&args.vault).with_bundled(BUNDLED_SKILLS);
     tool_map.insert("skills".to_string(), Box::new(skills_tool));
 
     // Step 10: build AgentRegistry — embed foundation agents from agents/*.md at

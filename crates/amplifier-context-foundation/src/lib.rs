@@ -14,24 +14,42 @@
 //! hooks.register(Box::new(FoundationContextHook::new()));
 //! ```
 //!
-//! The hook fires on every `ProviderRequest` event, injecting the delegation
-//! instructions and multi-agent patterns as ephemeral context before each LLM call.
+//! The hook fires on every `ProviderRequest` event, injecting the compact
+//! delegate-first context as ephemeral context before each LLM call.
 
 use amplifier_module_orchestrator_loop_streaming::{Hook, HookContext, HookEvent, HookResult};
 
 // ---------------------------------------------------------------------------
-// Embedded context files (exact ports from Python amplifier-foundation)
+// Lean delegation context — compact replacement for large context files
 // ---------------------------------------------------------------------------
 
-/// Delegation instructions — teaches the LLM to delegate to agents instead of
-/// doing complex work directly. Mirrors `foundation:context/agents/delegation-instructions.md`.
-pub const DELEGATION_INSTRUCTIONS: &str =
-    include_str!("../context/delegation-instructions.md");
+/// Exp-lean delegation context — injected once per ProviderRequest.
+/// Compact version of foundation context: establishes delegate-first mindset
+/// without bloating every turn with thousands of tokens of philosophy.
+/// Agent list is already in DelegateTool.get_spec() — not repeated here.
+const EXP_LEAN_CONTEXT: &str = "\
+## Delegate-First Operation
 
-/// Multi-agent patterns — teaches parallel dispatch, context sharing, session
-/// resumption. Mirrors `foundation:context/agents/multi-agent-patterns.md`.
-pub const MULTI_AGENT_PATTERNS: &str =
-    include_str!("../context/multi-agent-patterns.md");
+DEFAULT: delegate to specialist agents. EXCEPTION: trivial single-step ops only.
+
+Use the `delegate` tool for: file exploration (>2 files), debugging, implementation, \
+architecture decisions, git operations, security review. \
+Available agents and their specialties are listed in the delegate tool's spec.
+
+**Skills carry behavioral guidance — load on demand:**
+- `load_skill(\"brainstorming\")` — before any new feature or creative work
+- `load_skill(\"systematic-debugging\")` — before fixing any bug or failure
+- `load_skill(\"writing-plans\")` — before multi-step implementation tasks
+- `load_skill(\"test-driven-development\")` — before writing code
+- `load_skill(\"verification-before-completion\")` — before claiming work is done
+
+**Relay**: always summarize agent/tool results in your final message — \
+the user sees only your final response text, not intermediate tool output.
+";
+
+// Old constants kept on disk (context/*.md) but no longer embedded here:
+// pub const DELEGATION_INSTRUCTIONS: &str = include_str!("../context/delegation-instructions.md");
+// pub const MULTI_AGENT_PATTERNS: &str    = include_str!("../context/multi-agent-patterns.md");
 
 // ---------------------------------------------------------------------------
 // FoundationContextHook
@@ -39,9 +57,9 @@ pub const MULTI_AGENT_PATTERNS: &str =
 
 /// Hook that injects foundation context before each LLM provider call.
 ///
-/// Mirrors the Python `amplifier-foundation` bundle's context injection —
-/// the same text that teaches the LLM to delegate autonomously in Python
-/// sessions is now injected in Rust sessions too.
+/// Uses a compact inline context (~400 chars) instead of the full markdown
+/// files, reducing per-turn token overhead while preserving the delegate-first
+/// behavioral contract.
 ///
 /// Fires on `HookEvent::ProviderRequest`.
 pub struct FoundationContextHook {
@@ -50,23 +68,18 @@ pub struct FoundationContextHook {
 }
 
 impl FoundationContextHook {
-    /// Create a hook that injects all foundation context files.
+    /// Create a hook that injects the lean foundation context.
     pub fn new() -> Self {
-        let context = format!(
-            "{}\n\n---\n\n{}",
-            DELEGATION_INSTRUCTIONS, MULTI_AGENT_PATTERNS,
-        );
-        Self { context }
+        Self {
+            context: EXP_LEAN_CONTEXT.to_string(),
+        }
     }
 
-    /// Create a hook with custom context content appended to the foundation files.
+    /// Create a hook with custom context content appended after the lean foundation context.
     ///
-    /// Use this to add project-specific context alongside the foundation files.
+    /// Use this to add project-specific context alongside the foundation context.
     pub fn with_extra(extra: &str) -> Self {
-        let context = format!(
-            "{}\n\n---\n\n{}\n\n---\n\n{}",
-            DELEGATION_INSTRUCTIONS, MULTI_AGENT_PATTERNS, extra,
-        );
+        let context = format!("{}\n\n---\n\n{}", EXP_LEAN_CONTEXT, extra);
         Self { context }
     }
 }
@@ -100,51 +113,39 @@ mod tests {
     use amplifier_module_orchestrator_loop_streaming::HookEvent;
 
     #[test]
-    fn delegation_instructions_non_empty_and_has_key_concepts() {
-        assert!(!DELEGATION_INSTRUCTIONS.is_empty());
+    fn lean_context_non_empty_and_has_key_concepts() {
+        assert!(!EXP_LEAN_CONTEXT.is_empty());
         assert!(
-            DELEGATION_INSTRUCTIONS.contains("ORCHESTRATOR"),
-            "must contain the orchestrator framing"
-        );
-        assert!(
-            DELEGATION_INSTRUCTIONS.contains("explorer"),
-            "must reference explorer agent"
-        );
-        assert!(
-            DELEGATION_INSTRUCTIONS.contains("delegate"),
+            EXP_LEAN_CONTEXT.contains("delegate"),
             "must reference the delegate tool"
         );
-    }
-
-    #[test]
-    fn multi_agent_patterns_non_empty_and_has_key_concepts() {
-        assert!(!MULTI_AGENT_PATTERNS.is_empty());
         assert!(
-            MULTI_AGENT_PATTERNS.contains("Parallel"),
-            "must cover parallel dispatch"
+            EXP_LEAN_CONTEXT.contains("load_skill"),
+            "must reference load_skill for on-demand skills"
         );
         assert!(
-            MULTI_AGENT_PATTERNS.contains("context_scope"),
-            "must cover context sharing"
+            EXP_LEAN_CONTEXT.contains("Delegate-First"),
+            "must contain the delegate-first framing"
         );
     }
 
     #[test]
-    fn hook_new_combines_both_files() {
+    fn hook_new_uses_lean_context() {
         let hook = FoundationContextHook::new();
-        assert!(hook.context.contains("ORCHESTRATOR"));
-        assert!(hook.context.contains("Parallel Agent Dispatch"));
+        assert!(hook.context.contains("Delegate-First"));
+        assert!(hook.context.contains("load_skill"));
+        assert!(hook.context.contains("delegate"));
     }
 
     #[test]
     fn hook_with_extra_appends_custom_content() {
         let hook = FoundationContextHook::with_extra("## Custom Context\nproject-specific");
-        assert!(hook.context.contains("ORCHESTRATOR"));
+        assert!(hook.context.contains("Delegate-First"));
         assert!(hook.context.contains("project-specific"));
     }
 
     #[tokio::test]
-    async fn hook_returns_inject_context_on_provider_request() {
+    async fn hook_returns_system_prompt_addendum_on_provider_request() {
         let hook = FoundationContextHook::new();
         assert_eq!(hook.events(), &[HookEvent::ProviderRequest]);
         // HookContext has no Default impl — construct explicitly.
@@ -155,8 +156,8 @@ mod tests {
         let result = hook.handle(&ctx).await;
         match result {
             HookResult::SystemPromptAddendum(text) => {
-                assert!(text.contains("ORCHESTRATOR"));
-                assert!(text.contains("Parallel"));
+                assert!(text.contains("Delegate-First"));
+                assert!(text.contains("load_skill"));
             }
             other => panic!("expected SystemPromptAddendum, got {:?}", other),
         }
